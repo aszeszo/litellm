@@ -3527,7 +3527,11 @@ class _RegistrationWrite:
 
 
 def _registration_base(
-    key: str, value: Mapping[str, object], custom_llm_provider: str | None, warning_display_name: str | None
+    key: str,
+    value: Mapping[str, object],
+    custom_llm_provider: str | None,
+    warning_display_name: str | None,
+    suppress_missing_cache_cost_warning: bool,
 ) -> _RegistrationWrite:
     provider: Final = str(value.get("litellm_provider") or "")
     if provider in PROVIDERS_THAT_AUTHENTICATE_ON_PROVIDER_INFO or any(
@@ -3543,8 +3547,10 @@ def _registration_base(
             entry=dict(_without_synthesized_costs(builtin_model_info, key=key, value=value)),
         )
     fallback: Final = _fallback_registration(key=key, provider=provider, value=value)
-    if not fallback.matched_builtin and (
-        value.get("cache_creation_input_token_cost") is None
+    if (
+        not suppress_missing_cache_cost_warning
+        and not fallback.matched_builtin
+        and value.get("cache_creation_input_token_cost") is None
         and value.get("cache_read_input_token_cost") is None
         and value.get("tiered_pricing") is None
         and (value.get("input_cost_per_token") is not None or value.get("output_cost_per_token") is not None)
@@ -3557,9 +3563,15 @@ def _registration_base(
 
 
 def _registration_write(
-    key: str, value: Mapping[str, object], custom_llm_provider: str | None, warning_display_name: str | None
+    key: str,
+    value: Mapping[str, object],
+    custom_llm_provider: str | None,
+    warning_display_name: str | None,
+    suppress_missing_cache_cost_warning: bool,
 ) -> _RegistrationWrite:
-    base: Final = _registration_base(key, value, custom_llm_provider, warning_display_name)
+    base: Final = _registration_base(
+        key, value, custom_llm_provider, warning_display_name, suppress_missing_cache_cost_warning
+    )
     # ``get_model_info`` returns ``litellm_provider: None`` when the
     # provider is unknown (e.g. custom deployments registered via
     # ``Router.add_deployment``). Persisting that None into
@@ -3578,16 +3590,23 @@ def _registration_attempt(
     value: Mapping[str, object],
     custom_llm_provider: str | None,
     warning_display_name: str | None,
+    suppress_missing_cache_cost_warning: bool,
     final_attempt: bool,
 ) -> _RegistrationWrite | None:
     source: Final = _builtin_cost_map()
-    write: Final = _registration_write(key, value, custom_llm_provider, warning_display_name)
+    write: Final = _registration_write(
+        key, value, custom_llm_provider, warning_display_name, suppress_missing_cache_cost_warning
+    )
     _replace_cost_map_entry(_builtin_cost_map() if final_attempt else source, write.key, write.entry)
     return write if final_attempt or litellm.model_cost is source else None
 
 
 def _register_on_current_map(
-    key: str, value: Mapping[str, object], custom_llm_provider: str | None, warning_display_name: str | None
+    key: str,
+    value: Mapping[str, object],
+    custom_llm_provider: str | None,
+    warning_display_name: str | None,
+    suppress_missing_cache_cost_warning: bool,
 ) -> _RegistrationWrite:
     """A price data reload that swaps the map while the entry is being built or written would otherwise get the old
     map's prices written over its own, or drop the entry with the old map, so each attempt writes into the map it was
@@ -3595,7 +3614,12 @@ def _register_on_current_map(
     writes into the current map, so the entry is never lost."""
     attempts: Final = (
         _registration_attempt(
-            key, value, custom_llm_provider, warning_display_name, final_attempt=attempt == _REGISTRATION_ATTEMPTS - 1
+            key,
+            value,
+            custom_llm_provider,
+            warning_display_name,
+            suppress_missing_cache_cost_warning,
+            final_attempt=attempt == _REGISTRATION_ATTEMPTS - 1,
         )
         for attempt in range(_REGISTRATION_ATTEMPTS)
     )
@@ -3673,6 +3697,7 @@ def register_model(
     warning_display_name: str | None = None,
     custom_llm_provider: str | None = None,
     add_to_provider_model_sets: bool = True,
+    suppress_missing_cache_cost_warning: bool = False,
 ):
     """
     Register new / Override existing models (and their pricing) to specific providers.
@@ -3720,7 +3745,9 @@ def register_model(
             _runtime_registered_model_cost[_registered_key] = dict(_registered_value)
 
     for key, value in loaded_model_cost.items():
-        write = _register_on_current_map(str(key), value, custom_llm_provider, warning_display_name)
+        write = _register_on_current_map(
+            str(key), value, custom_llm_provider, warning_display_name, suppress_missing_cache_cost_warning
+        )
 
         # Invalidate case-insensitive lookup map since model_cost was modified
         _invalidate_model_cost_lowercase_map()

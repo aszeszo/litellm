@@ -1218,6 +1218,7 @@ def _register_custom_pricing_for_request(
         warning_display_name=shared_key,
         custom_llm_provider=custom_llm_provider,
         add_to_provider_model_sets=False,
+        suppress_missing_cache_cost_warning=True,
     )
     litellm.register_model(
         {shared_key: CustomPricingLiteLLMParams.strip_custom_pricing_fields(entry)},
@@ -1225,6 +1226,7 @@ def _register_custom_pricing_for_request(
         warning_display_name=shared_key,
         custom_llm_provider=custom_llm_provider,
         add_to_provider_model_sets=False,
+        suppress_missing_cache_cost_warning=True,
     )
 
 

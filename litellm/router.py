@@ -11006,6 +11006,7 @@ class Router:
                 warning_display_name=model,
                 custom_llm_provider=custom_llm_provider,
                 add_to_provider_model_sets=False,
+                suppress_missing_cache_cost_warning=True,
             )
 
         ## OLD MODEL REGISTRATION ## Kept to prevent breaking changes
@@ -11048,6 +11049,7 @@ class Router:
         litellm.register_model(
             model_cost={_key: shared_model_info for _key in backend_keys},
             persist_across_reloads=False,
+            suppress_missing_cache_cost_warning=True,
         )
 
     def replay_model_cost_registrations(self) -> None:

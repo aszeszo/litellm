@@ -74,6 +74,33 @@ def test_first_registration_leaves_sparse_entry_without_cost_keys():
     assert "output_cost_per_token" not in entry, entry
 
 
+def test_router_shared_backend_does_not_warn_about_intentionally_stripped_cache_costs(caplog):
+    import logging
+
+    import litellm
+    from litellm import Router
+
+    caplog.set_level(logging.WARNING)
+    Router(
+        model_list=[
+            {
+                "model_name": "zai-warning-test",
+                "litellm_params": {"model": "zai/glm-warning-test"},
+                "model_info": {
+                    "cache_creation_input_token_cost": 0,
+                    "cache_read_input_token_cost": 0,
+                },
+            }
+        ]
+    )
+
+    assert "cache cost fields will default to 0" not in caplog.text
+
+    litellm.register_model({"direct-warning-test": {"litellm_provider": "custom"}})
+
+    assert "cache cost fields will default to 0" in caplog.text
+
+
 def test_second_registration_does_not_persist_synthesized_zero_costs():
     """The #30198 bug: re-registering the same sparse entry made
     ``get_model_info`` synthesize cost = 0 and write it back. Verify the
