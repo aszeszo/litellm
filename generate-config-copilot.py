@@ -12,6 +12,7 @@
 import os
 import sys
 from pathlib import Path
+from typing import Literal, TypedDict
 
 import httpx
 import yaml
@@ -24,11 +25,18 @@ from litellm.llms.github_copilot.common_utils import (
 )
 
 
+class ModelOverride(TypedDict, total=False):
+    skip: bool
+    codex_visibility: Literal["list", "hide"]
+    codex_description: str
+
+
 CONFIG: dict[str, JsonValue] = {
     "general_settings": {"master_key": "dummy"},
     "litellm_settings": {"drop_params": True, "set_verbose": False},
     "model_list": [],
 }
+MODEL_OVERRIDES: dict[str, ModelOverride] = {}
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 CHATGPT_MODELS_FILE = SCRIPT_DIRECTORY / "list-chatgpt-models.json"
@@ -167,6 +175,17 @@ def codex_api_metadata(metadata: JsonObject, mode: str) -> JsonObject:
     return {**metadata, "use_responses_lite": False}
 
 
+def apply_codex_overrides(model: CopilotModel, metadata: JsonObject) -> JsonObject:
+    override = MODEL_OVERRIDES.get(model.id, {})
+    visibility = override.get("codex_visibility")
+    description = override.get("codex_description")
+    return {
+        **metadata,
+        **({"visibility": visibility} if visibility is not None else {}),
+        **({"description": description} if description is not None else {}),
+    }
+
+
 def normalized_endpoints(model: CopilotModel) -> tuple[str, ...]:
     aliases = {
         "/responses": "/v1/responses",
@@ -221,18 +240,22 @@ def build_config(
                 "mode": mode,
                 "supported_endpoints": list(endpoints),
                 **reasoning_model_info(model),
-                "codex": codex_api_metadata(
-                    apply_copilot_limits(
-                        codex_metadata(references[model.id])
-                        if model.id in references
-                        else copilot_codex_metadata(model, default_model),
-                        model.capabilities.limits,
+                "codex": apply_codex_overrides(
+                    model,
+                    codex_api_metadata(
+                        apply_copilot_limits(
+                            codex_metadata(references[model.id])
+                            if model.id in references
+                            else copilot_codex_metadata(model, default_model),
+                            model.capabilities.limits,
+                        ),
+                        mode,
                     ),
-                    mode,
                 ),
             },
         }
         for model in copilot_models
+        if not MODEL_OVERRIDES.get(model.id, {}).get("skip", False)
         for endpoints in (normalized_endpoints(model),)
         for mode in (model_mode(model, endpoints),)
     ]
