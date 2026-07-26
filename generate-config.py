@@ -13,7 +13,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 from uuid import uuid4
 
 import httpx
@@ -42,7 +42,6 @@ CONFIG: dict[str, JsonValue] = {
     "litellm_settings": {"drop_params": True, "set_verbose": False},
     "model_list": [],
 }
-MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {}
 MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
     ("github_copilot", "gpt-5.6-sol"): {"codex_priority": 101, "codex_description": "GPT-5.6 Sol"},
     ("github_copilot", "gpt-5.6-terra"): {"codex_priority": 102, "codex_description": "GPT-5.6 Terra"},
@@ -117,6 +116,23 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
         )
     },
 }
+MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
+    (provider, model_id): cast(
+        ModelOverride,
+        {
+            **override,
+            **(
+                {"model_id": model_id}
+                if provider == "github_copilot"
+                and not model_id.startswith("gpt-")
+                and not override.get("skip", False)
+                else {}
+            ),
+        },
+    )
+    for (provider, model_id), override in MODEL_OVERRIDES_WORK.items()
+}
+ENABLE_GITHUB_COPILOT = True
 DUMMY_MODELS: frozenset[str] = frozenset()
 DUMMY_MODELS_WORK: frozenset[str] = frozenset({"gpt-5.2"})
 
@@ -721,12 +737,16 @@ def build_config(
         raise RuntimeError("Codex model metadata does not contain any models")
     overrides = MODEL_OVERRIDES_WORK if work else MODEL_OVERRIDES
     default_model = min(chatgpt_models, key=lambda model: model.priority)
-    copilot = copilot_entries(
-        copilot_models,
-        chatgpt_models,
-        overrides,
-        "" if work else "copilot/",
-        DUMMY_MODELS_WORK if work else DUMMY_MODELS,
+    copilot = (
+        copilot_entries(
+            copilot_models,
+            chatgpt_models,
+            overrides,
+            "" if work else "copilot/",
+            DUMMY_MODELS_WORK if work else DUMMY_MODELS,
+        )
+        if work or ENABLE_GITHUB_COPILOT
+        else []
     )
     if work:
         return {**CONFIG, "model_list": [*copilot, *local_entries(LOCAL_MODELS_WORK, default_model, overrides)]}
@@ -766,7 +786,8 @@ def main() -> int:
                 for provider, api_key in api_keys.items()
             }
         )
-        write_config(build_config(load_copilot_models(), chatgpt_models, additional_models, api_keys, work))
+        copilot_models = load_copilot_models() if work or ENABLE_GITHUB_COPILOT else ()
+        write_config(build_config(copilot_models, chatgpt_models, additional_models, api_keys, work))
     except Exception as error:
         sys.stderr.write(f"generate-config: {error}\n")
         return 1

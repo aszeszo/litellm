@@ -24,7 +24,9 @@ class GeneratedConfig(TypedDict):
 class GeneratorModule(Protocol):
     ChatGPTModel: type[BaseModel]
     CopilotModel: type[BaseModel]
+    ENABLE_GITHUB_COPILOT: bool
     MODEL_OVERRIDES: dict[tuple[str, str], dict[str, object]]
+    MODEL_OVERRIDES_WORK: dict[tuple[str, str], dict[str, object]]
     build_config: Callable[
         [tuple[BaseModel, ...], tuple[BaseModel, ...], dict[str, tuple[str, ...]], dict[str, str], bool],
         GeneratedConfig,
@@ -142,3 +144,27 @@ def test_provider_scoped_overrides_do_not_collide(generator: GeneratorModule, mo
 
     names = {row["model_name"] for row in config["model_list"]}
     assert {"personal-gpt", "work-gpt"} <= names
+
+
+def test_default_copilot_overrides_copy_work_curation_and_unprefix_non_gpt_models(generator: GeneratorModule):
+    skipped_work = {key for key, override in generator.MODEL_OVERRIDES_WORK.items() if override.get("skip") is True}
+    skipped_default = {key for key, override in generator.MODEL_OVERRIDES.items() if override.get("skip") is True}
+
+    assert skipped_default == skipped_work
+    assert generator.MODEL_OVERRIDES[("github_copilot", "gpt-5.5")].get("model_id") is None
+    assert generator.MODEL_OVERRIDES[("github_copilot", "claude-opus-5")]["model_id"] == "claude-opus-5"
+    assert generator.MODEL_OVERRIDES[("github_copilot", "gemini-3.5-flash")]["model_id"] == "gemini-3.5-flash"
+
+
+def test_default_mode_can_disable_copilot_models(generator: GeneratorModule, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(generator, "ENABLE_GITHUB_COPILOT", False)
+
+    config = generator.build_config(
+        (copilot_model(generator),),
+        (codex_model(generator),),
+        {},
+        {},
+        False,
+    )
+
+    assert [row["model_name"] for row in config["model_list"]] == ["chatgpt/gpt-5.5"]
