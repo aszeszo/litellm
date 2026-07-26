@@ -48,6 +48,7 @@ class CopilotModel(BaseModel):
 
     id: str
     capabilities: CopilotCapabilities
+    supported_endpoints: tuple[str, ...] = ()
 
 
 class CopilotModelsResponse(BaseModel):
@@ -150,6 +151,24 @@ def copilot_codex_metadata(model: CopilotModel, default_model: ChatGPTModel) -> 
     return JsonObjectAdapter.validate_python(merged)
 
 
+def normalized_endpoints(model: CopilotModel) -> tuple[str, ...]:
+    aliases = {
+        "/responses": "/v1/responses",
+        "/chat/completions": "/v1/chat/completions",
+    }
+    normalized = frozenset(aliases.get(endpoint, endpoint) for endpoint in model.supported_endpoints)
+    priorities = {"/v1/responses": 0, "/v1/messages": 1, "/v1/chat/completions": 2}
+    return tuple(sorted(normalized, key=lambda endpoint: (priorities.get(endpoint, 3), endpoint)))
+
+
+def model_mode(model: CopilotModel, endpoints: tuple[str, ...]) -> str:
+    if "/v1/responses" in endpoints:
+        return "responses"
+    if model.capabilities.model_extra.get("type") == "embeddings":
+        return "embedding"
+    return "chat"
+
+
 def build_config(
     copilot_models: tuple[CopilotModel, ...], chatgpt_models: tuple[ChatGPTModel, ...]
 ) -> dict[str, JsonValue]:
@@ -165,6 +184,8 @@ def build_config(
             "model_info": {
                 "cache_creation_input_token_cost": 0,
                 "cache_read_input_token_cost": 0,
+                "mode": model_mode(model, endpoints),
+                "supported_endpoints": list(endpoints),
                 "codex": apply_copilot_limits(
                     codex_metadata(references[model.id])
                     if model.id in references
@@ -174,6 +195,7 @@ def build_config(
             },
         }
         for model in copilot_models
+        for endpoints in (normalized_endpoints(model),)
     ]
     return {**CONFIG, "model_list": entries}
 
