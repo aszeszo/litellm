@@ -25,7 +25,6 @@ class GeneratorModule(Protocol):
     ChatGPTModel: type[BaseModel]
     CopilotModel: type[BaseModel]
     ENABLE_GITHUB_COPILOT: bool
-    DEFAULT_MODEL_PRIORITIES: dict[str, int]
     MODEL_OVERRIDES: dict[tuple[str, str], dict[str, object]]
     MODEL_OVERRIDES_WORK: dict[tuple[str, str], dict[str, object]]
     build_config: Callable[
@@ -128,10 +127,12 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
     assert [preset["effort"] for preset in reasoning] == ["none", "low", "medium", "high", "max"]
     assert rows["xiaomi/mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["litellm_params"]["api_base"] == "http://localhost:9090/v1"
-    for model_name, row in rows.items():
-        expected_priority = generator.DEFAULT_MODEL_PRIORITIES.get(model_name)
-        if expected_priority is not None:
-            assert row["model_info"]["codex"]["priority"] == expected_priority
+    assert rows["chatgpt/gpt-5.5"]["model_info"]["codex"]["priority"] == 4
+    assert rows["deepseek/deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 9
+    assert rows["zai/glm-5.2"]["model_info"]["codex"]["priority"] == 17
+    assert rows["xiaomi/mimo-v2.5-pro"]["model_info"]["codex"]["priority"] == 19
+    assert rows["moonshotai/kimi-k3"]["model_info"]["codex"]["priority"] == 23
+    assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["codex"]["priority"] == 24
 
 
 def test_provider_scoped_overrides_do_not_collide(generator: GeneratorModule, monkeypatch: pytest.MonkeyPatch):
@@ -154,12 +155,14 @@ def test_provider_scoped_overrides_do_not_collide(generator: GeneratorModule, mo
     assert {"personal-gpt", "work-gpt"} <= names
 
 
-def test_default_copilot_overrides_copy_work_curation_and_unprefix_non_gpt_models(generator: GeneratorModule):
+def test_default_copilot_overrides_preserve_work_skips_and_unprefix_non_gpt_models(generator: GeneratorModule):
     skipped_work = {key for key, override in generator.MODEL_OVERRIDES_WORK.items() if override.get("skip") is True}
     skipped_default = {key for key, override in generator.MODEL_OVERRIDES.items() if override.get("skip") is True}
 
     assert skipped_default == skipped_work
     assert generator.MODEL_OVERRIDES[("github_copilot", "gpt-5.5")].get("model_id") is None
+    assert generator.MODEL_OVERRIDES[("github_copilot", "gpt-5.5")]["codex_priority"] == 47
+    assert generator.MODEL_OVERRIDES_WORK[("github_copilot", "gpt-5.5")]["codex_priority"] == 104
     assert generator.MODEL_OVERRIDES[("github_copilot", "claude-opus-5")]["model_id"] == "claude-opus-5"
     assert generator.MODEL_OVERRIDES[("github_copilot", "gemini-3.5-flash")]["model_id"] == "gemini-3.5-flash"
 

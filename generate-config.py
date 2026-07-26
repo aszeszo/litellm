@@ -13,7 +13,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, TypedDict
 from uuid import uuid4
 
 import httpx
@@ -28,10 +28,15 @@ ProviderName = Literal["chatgpt", "github_copilot", "deepseek", "zai", "xiaomi",
 ModelKey = tuple[ProviderName, str]
 
 
+class ModelAlias(TypedDict):
+    model_id: str
+    codex_priority: int
+
+
 class ModelOverride(TypedDict, total=False):
     skip: bool
     model_id: str
-    aliases: list[str]
+    aliases: list[ModelAlias]
     codex_visibility: Literal["list", "hide"]
     codex_description: str
     codex_priority: int
@@ -56,7 +61,7 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
         "codex_description": "MAI-Code-1-Flash",
     },
     ("github_copilot", "claude-opus-5"): {
-        "aliases": ["claude-opus-5[1m]"],
+        "aliases": [{"model_id": "claude-opus-5[1m]", "codex_priority": 311}],
         "codex_priority": 301,
         "codex_description": "Claude Opus 5",
     },
@@ -69,14 +74,14 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
     ("github_copilot", "claude-opus-4.6"): {"codex_priority": 305, "codex_description": "Claude Opus 4.6"},
     ("github_copilot", "claude-opus-4.5"): {"codex_priority": 306, "codex_description": "Claude Opus 4.5"},
     ("github_copilot", "claude-sonnet-5"): {
-        "aliases": ["claude-sonnet-5[1m]"],
+        "aliases": [{"model_id": "claude-sonnet-5[1m]", "codex_priority": 312}],
         "codex_priority": 307,
         "codex_description": "Claude Sonnet 5",
     },
     ("github_copilot", "claude-sonnet-4.6"): {"codex_priority": 308, "codex_description": "Claude Sonnet 4.6"},
     ("github_copilot", "claude-sonnet-4.5"): {"codex_priority": 309, "codex_description": "Claude Sonnet 4.5"},
     ("github_copilot", "claude-haiku-4.5"): {
-        "aliases": ["claude-haiku-4-5-20251001"],
+        "aliases": [{"model_id": "claude-haiku-4-5-20251001", "codex_priority": 313}],
         "codex_priority": 310,
         "codex_description": "Claude Haiku 4.5",
     },
@@ -116,43 +121,6 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
         )
     },
 }
-_INITIAL_MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
-    **{
-        (provider, model_id): cast(
-            ModelOverride,
-            {
-                **override,
-                **(
-                    {"model_id": model_id}
-                    if provider == "github_copilot"
-                    and not model_id.startswith("gpt-")
-                    and not override.get("skip", False)
-                    else {}
-                ),
-            },
-        )
-        for (provider, model_id), override in MODEL_OVERRIDES_WORK.items()
-    },
-    **{
-        cast(ModelKey, (provider, model_id)): {"model_id": f"{provider}/{model_id}"}
-        for provider, model_ids in {
-            "chatgpt": (
-                "gpt-5.6-sol",
-                "gpt-5.6-terra",
-                "gpt-5.6-luna",
-                "gpt-5.5",
-                "gpt-5.4",
-                "gpt-5.4-mini",
-                "codex-auto-review",
-            ),
-            "deepseek": ("deepseek-v4-flash", "deepseek-v4-pro"),
-            "zai": ("glm-4.5", "glm-4.5-air", "glm-4.6", "glm-4.7", "glm-5", "glm-5-turbo", "glm-5.1", "glm-5.2"),
-            "xiaomi": ("mimo-v2.5", "mimo-v2.5-pro"),
-            "moonshotai": ("kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"),
-        }.items()
-        for model_id in model_ids
-    },
-}
 ENABLE_GITHUB_COPILOT = True
 DUMMY_MODELS: frozenset[str] = frozenset()
 DUMMY_MODELS_WORK: frozenset[str] = frozenset({"gpt-5.2"})
@@ -187,91 +155,127 @@ LOCAL_MODELS: list[LocalModel] = [
 ]
 LOCAL_MODELS_WORK: list[LocalModel] = []
 
-DEFAULT_MODEL_ORDER: tuple[str, ...] = (
-    "chatgpt/gpt-5.6-sol",
-    "chatgpt/gpt-5.6-terra",
-    "chatgpt/gpt-5.6-luna",
-    "chatgpt/gpt-5.5",
-    "chatgpt/gpt-5.4",
-    "chatgpt/gpt-5.4-mini",
-    "chatgpt/codex-auto-review",
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro",
-    "zai/glm-4.5",
-    "zai/glm-4.5-air",
-    "zai/glm-4.6",
-    "zai/glm-4.7",
-    "zai/glm-5",
-    "zai/glm-5-turbo",
-    "zai/glm-5.1",
-    "zai/glm-5.2",
-    "xiaomi/mimo-v2.5",
-    "xiaomi/mimo-v2.5-pro",
-    "moonshotai/kimi-k2.6",
-    "moonshotai/kimi-k2.7-code",
-    "moonshotai/kimi-k2.7-code-highspeed",
-    "moonshotai/kimi-k3",
-    "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
-    "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
-    "claude-opus-4.6",
-    "claude-opus-4.7",
-    "claude-opus-4.8-fast",
-    "claude-opus-4.8",
-    "claude-opus-5",
-    "claude-sonnet-4.6",
-    "claude-sonnet-5",
-    "claude-sonnet-4.5",
-    "claude-opus-4.5",
-    "claude-haiku-4.5",
-    "claude-opus-5[1m]",
-    "claude-sonnet-5[1m]",
-    "claude-haiku-4-5-20251001",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-pro",
-    "copilot/gpt-5.6-sol",
-    "copilot/gpt-5.6-terra",
-    "copilot/gpt-5.6-luna",
-    "copilot/gpt-5.5",
-    "copilot/gpt-5.4",
-    "copilot/gpt-5.4-mini",
-    "copilot/gpt-5.3-codex",
-    "copilot/gpt-5-mini",
-    "mai-code-1-flash-picker",
-)
-DEFAULT_MODEL_PRIORITIES = {model_name: priority for priority, model_name in enumerate(DEFAULT_MODEL_ORDER, 1)}
 MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
-    **{
-        key: cast(
-            ModelOverride,
-            {
-                **override,
-                **(
-                    {"codex_priority": priority}
-                    if (
-                        priority := DEFAULT_MODEL_PRIORITIES.get(
-                            override.get(
-                                "model_id",
-                                f"{'copilot/' if key[0] == 'github_copilot' else f'{key[0]}/'}{key[1]}",
-                            )
-                        )
-                    )
-                    is not None
-                    else {}
-                ),
-            },
-        )
-        for key, override in _INITIAL_MODEL_OVERRIDES.items()
+    ("chatgpt", "gpt-5.6-sol"): {"model_id": "chatgpt/gpt-5.6-sol", "codex_priority": 1},
+    ("chatgpt", "gpt-5.6-terra"): {"model_id": "chatgpt/gpt-5.6-terra", "codex_priority": 2},
+    ("chatgpt", "gpt-5.6-luna"): {"model_id": "chatgpt/gpt-5.6-luna", "codex_priority": 3},
+    ("chatgpt", "gpt-5.5"): {"model_id": "chatgpt/gpt-5.5", "codex_priority": 4},
+    ("chatgpt", "gpt-5.4"): {"model_id": "chatgpt/gpt-5.4", "codex_priority": 5},
+    ("chatgpt", "gpt-5.4-mini"): {"model_id": "chatgpt/gpt-5.4-mini", "codex_priority": 6},
+    ("chatgpt", "codex-auto-review"): {"model_id": "chatgpt/codex-auto-review", "codex_priority": 7},
+    ("deepseek", "deepseek-v4-flash"): {"model_id": "deepseek/deepseek-v4-flash", "codex_priority": 8},
+    ("deepseek", "deepseek-v4-pro"): {"model_id": "deepseek/deepseek-v4-pro", "codex_priority": 9},
+    ("zai", "glm-4.5"): {"model_id": "zai/glm-4.5", "codex_priority": 10},
+    ("zai", "glm-4.5-air"): {"model_id": "zai/glm-4.5-air", "codex_priority": 11},
+    ("zai", "glm-4.6"): {"model_id": "zai/glm-4.6", "codex_priority": 12},
+    ("zai", "glm-4.7"): {"model_id": "zai/glm-4.7", "codex_priority": 13},
+    ("zai", "glm-5"): {"model_id": "zai/glm-5", "codex_priority": 14},
+    ("zai", "glm-5-turbo"): {"model_id": "zai/glm-5-turbo", "codex_priority": 15},
+    ("zai", "glm-5.1"): {"model_id": "zai/glm-5.1", "codex_priority": 16},
+    ("zai", "glm-5.2"): {"model_id": "zai/glm-5.2", "codex_priority": 17},
+    ("xiaomi", "mimo-v2.5"): {"model_id": "xiaomi/mimo-v2.5", "codex_priority": 18},
+    ("xiaomi", "mimo-v2.5-pro"): {"model_id": "xiaomi/mimo-v2.5-pro", "codex_priority": 19},
+    ("moonshotai", "kimi-k2.6"): {"model_id": "moonshotai/kimi-k2.6", "codex_priority": 20},
+    ("moonshotai", "kimi-k2.7-code"): {"model_id": "moonshotai/kimi-k2.7-code", "codex_priority": 21},
+    ("moonshotai", "kimi-k2.7-code-highspeed"): {
+        "model_id": "moonshotai/kimi-k2.7-code-highspeed",
+        "codex_priority": 22,
     },
-    **{
-        cast(ModelKey, ("local", model["model_name"])): {
-            "codex_priority": DEFAULT_MODEL_PRIORITIES[model["model_name"]]
-        }
-        for model in LOCAL_MODELS
-        if model["model_name"] in DEFAULT_MODEL_PRIORITIES
+    ("moonshotai", "kimi-k3"): {"model_id": "moonshotai/kimi-k3", "codex_priority": 23},
+    ("local", "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"): {"codex_priority": 24},
+    ("local", "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M"): {"codex_priority": 25},
+    ("github_copilot", "claude-opus-4.6"): {
+        "model_id": "claude-opus-4.6",
+        "codex_priority": 26,
+        "codex_description": "Claude Opus 4.6",
     },
+    ("github_copilot", "claude-opus-4.7"): {
+        "model_id": "claude-opus-4.7",
+        "codex_priority": 27,
+        "codex_description": "Claude Opus 4.7",
+    },
+    ("github_copilot", "claude-opus-4.8-fast"): {
+        "model_id": "claude-opus-4.8-fast",
+        "codex_priority": 28,
+        "codex_description": "Claude Opus 4.8 (fast mode)",
+    },
+    ("github_copilot", "claude-opus-4.8"): {
+        "model_id": "claude-opus-4.8",
+        "codex_priority": 29,
+        "codex_description": "Claude Opus 4.8",
+    },
+    ("github_copilot", "claude-opus-5"): {
+        "model_id": "claude-opus-5",
+        "aliases": [{"model_id": "claude-opus-5[1m]", "codex_priority": 36}],
+        "codex_priority": 30,
+        "codex_description": "Claude Opus 5",
+    },
+    ("github_copilot", "claude-sonnet-4.6"): {
+        "model_id": "claude-sonnet-4.6",
+        "codex_priority": 31,
+        "codex_description": "Claude Sonnet 4.6",
+    },
+    ("github_copilot", "claude-sonnet-5"): {
+        "model_id": "claude-sonnet-5",
+        "aliases": [{"model_id": "claude-sonnet-5[1m]", "codex_priority": 37}],
+        "codex_priority": 32,
+        "codex_description": "Claude Sonnet 5",
+    },
+    ("github_copilot", "claude-sonnet-4.5"): {
+        "model_id": "claude-sonnet-4.5",
+        "codex_priority": 33,
+        "codex_description": "Claude Sonnet 4.5",
+    },
+    ("github_copilot", "claude-opus-4.5"): {
+        "model_id": "claude-opus-4.5",
+        "codex_priority": 34,
+        "codex_description": "Claude Opus 4.5",
+    },
+    ("github_copilot", "claude-haiku-4.5"): {
+        "model_id": "claude-haiku-4.5",
+        "aliases": [{"model_id": "claude-haiku-4-5-20251001", "codex_priority": 38}],
+        "codex_priority": 35,
+        "codex_description": "Claude Haiku 4.5",
+    },
+    ("github_copilot", "gemini-3.6-flash"): {
+        "model_id": "gemini-3.6-flash",
+        "codex_priority": 39,
+        "codex_description": "Gemini 3.6 Flash",
+    },
+    ("github_copilot", "gemini-3.5-flash"): {
+        "model_id": "gemini-3.5-flash",
+        "codex_priority": 40,
+        "codex_description": "Gemini 3.5 Flash",
+    },
+    ("github_copilot", "gemini-3.1-pro-preview"): {
+        "model_id": "gemini-3.1-pro-preview",
+        "codex_priority": 41,
+        "codex_description": "Gemini 3.1 Pro (Preview)",
+    },
+    ("github_copilot", "gemini-3-flash-preview"): {
+        "model_id": "gemini-3-flash-preview",
+        "codex_priority": 42,
+        "codex_description": "Gemini 3 Flash (Preview)",
+    },
+    ("github_copilot", "gemini-2.5-pro"): {
+        "model_id": "gemini-2.5-pro",
+        "codex_priority": 43,
+        "codex_description": "Gemini 2.5 Pro",
+    },
+    ("github_copilot", "gpt-5.6-sol"): {"codex_priority": 44, "codex_description": "GPT-5.6 Sol"},
+    ("github_copilot", "gpt-5.6-terra"): {"codex_priority": 45, "codex_description": "GPT-5.6 Terra"},
+    ("github_copilot", "gpt-5.6-luna"): {"codex_priority": 46, "codex_description": "GPT-5.6 Luna"},
+    ("github_copilot", "gpt-5.5"): {"codex_priority": 47, "codex_description": "GPT-5.5"},
+    ("github_copilot", "gpt-5.4"): {"codex_priority": 48, "codex_description": "GPT-5.4"},
+    ("github_copilot", "gpt-5.4-mini"): {"codex_priority": 49, "codex_description": "GPT-5.4 mini"},
+    ("github_copilot", "gpt-5.3-codex"): {"codex_priority": 50, "codex_description": "GPT-5.3-Codex"},
+    ("github_copilot", "gpt-5-mini"): {"codex_priority": 51, "codex_description": "GPT-5 mini"},
+    ("github_copilot", "mai-code-1-flash-picker"): {
+        "model_id": "mai-code-1-flash-picker",
+        "codex_priority": 52,
+        "codex_description": "MAI-Code-1-Flash",
+    },
+    **{key: {"skip": True} for key, override in MODEL_OVERRIDES_WORK.items() if override.get("skip", False)},
 }
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -544,18 +548,12 @@ def dummy_model_entries(
     ]
 
 
-def public_codex_metadata(
-    metadata: JsonObject,
-    model_name: str,
-    overrides: dict[ModelKey, ModelOverride],
-    hidden: bool = False,
-) -> JsonObject:
-    priority = DEFAULT_MODEL_PRIORITIES.get(model_name) if overrides is MODEL_OVERRIDES else None
+def alias_codex_metadata(metadata: JsonObject, alias: ModelAlias) -> JsonObject:
     return {
         **metadata,
-        "slug": model_name,
-        **({"priority": priority} if priority is not None else {}),
-        **({"visibility": "hide"} if hidden else {}),
+        "slug": alias["model_id"],
+        "priority": alias["codex_priority"],
+        "visibility": "hide",
     }
 
 
@@ -565,7 +563,7 @@ def model_entry(
     references: dict[str, ChatGPTModel],
     model_name: str,
     overrides: dict[ModelKey, ModelOverride],
-    hidden_alias: bool = False,
+    alias: ModelAlias | None = None,
 ) -> JsonObject:
     endpoints = normalized_endpoints(model)
     mode = model_mode(model, endpoints)
@@ -592,7 +590,7 @@ def model_entry(
             "mode": mode,
             "supported_endpoints": list(endpoints),
             **reasoning_model_info(model),
-            "codex": public_codex_metadata(metadata, model_name, overrides, hidden_alias),
+            "codex": {**metadata, "slug": model_name} if alias is None else alias_codex_metadata(metadata, alias),
         },
     }
 
@@ -621,7 +619,7 @@ def copilot_entries(
         if not overrides.get(("github_copilot", model.id), {}).get("skip", False)
     ]
     aliases = [
-        model_entry(model, default_model, references, alias, overrides, hidden_alias=True)
+        model_entry(model, default_model, references, alias["model_id"], overrides, alias=alias)
         for model in copilot_models
         if not overrides.get(("github_copilot", model.id), {}).get("skip", False)
         for alias in overrides.get(("github_copilot", model.id), {}).get("aliases", [])
@@ -768,8 +766,8 @@ def configured_entries_with_aliases(
             configured_entry(
                 provider,
                 model_id,
-                alias,
-                public_codex_metadata(metadata, alias, overrides, hidden=True),
+                alias["model_id"],
+                alias_codex_metadata(metadata, alias),
                 api_key,
             )
             for alias in aliases
@@ -855,7 +853,7 @@ def local_entries(
         for entry in [
             local_entry(model, model_name, metadata),
             *(
-                local_entry(model, alias, public_codex_metadata(metadata, alias, overrides, hidden=True))
+                local_entry(model, alias["model_id"], alias_codex_metadata(metadata, alias))
                 for alias in overrides.get(("local", model["model_name"]), {}).get("aliases", [])
             ),
         ]
