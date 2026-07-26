@@ -1149,6 +1149,67 @@ class TestFunctionCallTransformation:
         assert tool_msg.get("content") == "Rainy"
         assert tool_msg.get("tool_call_id") == "call_1fe70e2a-a596-45ef-b72c-9b8567c460e5"
 
+    @pytest.mark.parametrize(
+        ("reasoning_item", "expected"),
+        [
+            (
+                {
+                    "type": "reasoning",
+                    "content": [{"type": "reasoning_text", "text": "raw reasoning"}],
+                    "summary": [{"type": "summary_text", "text": "summary"}],
+                },
+                "raw reasoning",
+            ),
+            (
+                {
+                    "type": "reasoning",
+                    "summary": [
+                        {"type": "summary_text", "text": "first"},
+                        {"type": "summary_text", "text": "second"},
+                    ],
+                },
+                "first second",
+            ),
+        ],
+    )
+    def test_reasoning_input_is_attached_to_assistant_message(self, reasoning_item, expected):
+        messages = LiteLLMCompletionResponsesConfig._transform_response_input_param_to_chat_completion_message(
+            input=[
+                reasoning_item,
+                {"type": "message", "role": "assistant", "content": "answer"},
+            ]
+        )
+
+        assert len(messages) == 1
+        assert messages[0].get("reasoning_content") == expected
+
+    def test_reasoning_input_is_attached_to_parallel_tool_call_message(self):
+        messages = LiteLLMCompletionResponsesConfig._transform_response_input_param_to_chat_completion_message(
+            input=[
+                {
+                    "type": "reasoning",
+                    "summary": [{"type": "summary_text", "text": "tool reasoning"}],
+                },
+                {"type": "function_call", "call_id": "call_1", "name": "first", "arguments": "{}"},
+                {"type": "function_call", "call_id": "call_2", "name": "second", "arguments": "{}"},
+            ]
+        )
+
+        assert len(messages) == 1
+        assert messages[0].get("reasoning_content") == "tool reasoning"
+        assert len(messages[0].get("tool_calls", [])) == 2
+
+    def test_unusable_reasoning_input_remains_ignored(self):
+        messages = LiteLLMCompletionResponsesConfig._transform_response_input_param_to_chat_completion_message(
+            input=[
+                {"type": "reasoning", "encrypted_content": "opaque"},
+                {"type": "message", "role": "assistant", "content": "answer"},
+            ]
+        )
+
+        assert len(messages) == 1
+        assert messages[0].get("reasoning_content") is None
+
     def test_complete_request_transformation_with_function_calls(self):
         """Test the complete request transformation that would be used by the responses API"""
         test_input = [

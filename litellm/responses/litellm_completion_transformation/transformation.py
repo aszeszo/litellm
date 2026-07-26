@@ -577,6 +577,62 @@ def _chain_session_metadata(chain_session: str, request_kwargs: Mapping[str, obj
 
 class LiteLLMCompletionResponsesConfig:
     @staticmethod
+    def _extract_reasoning_content_from_response_input(input_item: dict[str, Any]) -> str | None:
+        for field, supported_types in (
+            ("content", {"reasoning_text", "text"}),
+            ("summary", {"summary_text"}),
+        ):
+            parts = input_item.get(field)
+            if not isinstance(parts, list):
+                continue
+            text = " ".join(
+                part["text"]
+                for part in parts
+                if isinstance(part, dict)
+                and part.get("type") in supported_types
+                and isinstance(part.get("text"), str)
+                and part["text"]
+            )
+            if text:
+                return text
+        return None
+
+    @staticmethod
+    def _add_reasoning_content_to_assistant_messages(
+        messages: list[
+            AllMessageValues
+            | GenericChatCompletionMessage
+            | ChatCompletionMessageToolCall
+            | ChatCompletionResponseMessage
+        ],
+        reasoning_content: str,
+    ) -> tuple[
+        list[
+            AllMessageValues
+            | GenericChatCompletionMessage
+            | ChatCompletionMessageToolCall
+            | ChatCompletionResponseMessage
+        ],
+        bool,
+    ]:
+        found_assistant = any(message.get("role") == "assistant" for message in messages)
+        return (
+            [
+                cast(
+                    AllMessageValues
+                    | GenericChatCompletionMessage
+                    | ChatCompletionMessageToolCall
+                    | ChatCompletionResponseMessage,
+                    {**message, "reasoning_content": reasoning_content},
+                )
+                if message.get("role") == "assistant"
+                else message
+                for message in messages
+            ],
+            found_assistant,
+        )
+
+    @staticmethod
     def get_supported_openai_params(model: str) -> list:
         """
         LiteLLM Adapter from OpenAI Responses API to Chat Completion API supports a subset of OpenAI Responses API params
@@ -1139,13 +1195,28 @@ class LiteLLMCompletionResponsesConfig:
             messages.append(ChatCompletionUserMessage(role="user", content=input))
         elif isinstance(input, list):
             existing_tool_call_ids: Final[set[str]] = set()
+            pending_reasoning_content: str | None = None
             for _input in input:
+                if _input.get("type") == "reasoning":
+                    pending_reasoning_content = (
+                        LiteLLMCompletionResponsesConfig._extract_reasoning_content_from_response_input(_input)
+                    )
+                    continue
                 chat_completion_messages = (
                     LiteLLMCompletionResponsesConfig._transform_responses_api_input_item_to_chat_completion_message(
                         input_item=_input,
                         replay_reasoning=replay_reasoning,
                     )
                 )
+                if pending_reasoning_content is not None:
+                    chat_completion_messages, found_assistant = (
+                        LiteLLMCompletionResponsesConfig._add_reasoning_content_to_assistant_messages(
+                            messages=chat_completion_messages,
+                            reasoning_content=pending_reasoning_content,
+                        )
+                    )
+                    if found_assistant or chat_completion_messages:
+                        pending_reasoning_content = None
 
                 if LiteLLMCompletionResponsesConfig._is_input_item_function_call(input_item=_input):
                     call_id_raw = _input.get("call_id") or _input.get("id") or ""
