@@ -30,6 +30,7 @@ class ModelOverride(TypedDict, total=False):
     model_id: str
     codex_visibility: Literal["list", "hide"]
     codex_description: str
+    codex_priority: int
 
 
 CONFIG: dict[str, JsonValue] = {
@@ -181,11 +182,13 @@ def apply_codex_overrides(model: CopilotModel, metadata: JsonObject) -> JsonObje
     model_id = override.get("model_id")
     visibility = override.get("codex_visibility")
     description = override.get("codex_description")
+    priority = override.get("codex_priority")
     return {
         **metadata,
         **({"id": model_id, "slug": model_id} if model_id is not None else {}),
         **({"visibility": visibility} if visibility is not None else {}),
         **({"description": description} if description is not None else {}),
+        **({"priority": priority} if priority is not None else {}),
     }
 
 
