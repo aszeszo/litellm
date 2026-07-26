@@ -37,10 +37,20 @@ JsonObject = dict[str, JsonValue]
 JsonObjectAdapter = TypeAdapter(JsonObject)
 
 
+class CopilotSupports(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    adaptive_thinking: bool = False
+    max_thinking_budget: int | None = None
+    min_thinking_budget: int | None = None
+    reasoning_effort: tuple[str, ...] = ()
+
+
 class CopilotCapabilities(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     limits: JsonObject = Field(default_factory=dict)
+    supports: CopilotSupports = Field(default_factory=CopilotSupports)
 
 
 class CopilotModel(BaseModel):
@@ -138,7 +148,7 @@ def merge_json(default: JsonValue, supplied: JsonValue) -> JsonValue:
 
 
 def copilot_codex_metadata(model: CopilotModel, default_model: ChatGPTModel) -> JsonObject:
-    copilot = JsonObjectAdapter.validate_python(model.model_dump(mode="json", exclude_none=False))
+    copilot = JsonObjectAdapter.validate_python(model.model_dump(mode="json", exclude_unset=True))
     name = copilot.get("name")
     policy = copilot.get("policy")
     description = policy.get("terms") if isinstance(policy, dict) else None
@@ -175,6 +185,24 @@ def model_mode(model: CopilotModel, endpoints: tuple[str, ...]) -> str:
     return "chat"
 
 
+def reasoning_model_info(model: CopilotModel) -> JsonObject:
+    supports = model.capabilities.supports
+    effort_fields: JsonObject = {
+        f"supports_{effort}_reasoning_effort": True
+        for effort in supports.reasoning_effort
+        if effort in {"minimal", "low", "medium", "high", "xhigh", "max"}
+    }
+    supports_reasoning = bool(supports.reasoning_effort) or supports.max_thinking_budget is not None
+    return {
+        "supports_reasoning": supports_reasoning,
+        "supports_adaptive_thinking": supports.adaptive_thinking,
+        "supports_output_config": supports.adaptive_thinking,
+        **({"max_thinking_budget": supports.max_thinking_budget} if supports.max_thinking_budget is not None else {}),
+        **({"min_thinking_budget": supports.min_thinking_budget} if supports.min_thinking_budget is not None else {}),
+        **effort_fields,
+    }
+
+
 def build_config(
     copilot_models: tuple[CopilotModel, ...], chatgpt_models: tuple[ChatGPTModel, ...]
 ) -> dict[str, JsonValue]:
@@ -192,6 +220,7 @@ def build_config(
                 "cache_read_input_token_cost": 0,
                 "mode": mode,
                 "supported_endpoints": list(endpoints),
+                **reasoning_model_info(model),
                 "codex": codex_api_metadata(
                     apply_copilot_limits(
                         codex_metadata(references[model.id])
