@@ -41,7 +41,7 @@ class ZAIChatConfig(OpenAIGPTConfig):
         return messages, tools
 
     def get_supported_openai_params(self, model: str) -> list:
-        base_params: Final = [
+        return [
             "max_tokens",
             "stream",
             "stream_options",
@@ -50,14 +50,28 @@ class ZAIChatConfig(OpenAIGPTConfig):
             "stop",
             "tools",
             "tool_choice",
+            "thinking",
+            "reasoning_effort",
         ]
 
-        import litellm
-
-        try:
-            if litellm.supports_reasoning(model=model, custom_llm_provider=self.custom_llm_provider):
-                base_params.append("thinking")
-        except Exception:
-            pass
-
-        return base_params
+    def map_openai_params(
+        self,
+        non_default_params: dict,
+        optional_params: dict,
+        model: str,
+        drop_params: bool,
+    ) -> dict:
+        reasoning_effort = non_default_params.get("reasoning_effort")
+        mapped_params = super().map_openai_params(
+            {key: value for key, value in non_default_params.items() if key != "reasoning_effort"},
+            optional_params,
+            model,
+            drop_params,
+        )
+        if reasoning_effort is None:
+            return mapped_params
+        if "thinking" not in mapped_params:
+            mapped_params["thinking"] = {"type": "disabled" if reasoning_effort == "none" else "enabled"}
+        if model == "glm-5.2" and reasoning_effort != "none":
+            mapped_params["reasoning_effort"] = "max" if reasoning_effort == "max" else "high"
+        return mapped_params

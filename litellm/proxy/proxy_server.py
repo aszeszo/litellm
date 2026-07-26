@@ -12238,10 +12238,10 @@ async def _deployment_hidden_by_listing_callbacks(deployment: Deployment, user_a
 
 def _client_specific_model_list(
     request: Request,
-    model_names: List[str],
-    router: Optional[Router],
+    model_names: list[str],
+    router: Router | None,
     settings: dict[str, object],
-) -> Optional[dict[str, object]]:
+) -> dict[str, object] | None:
     if request.url.path != "/v1/models" or router is None:
         return None
 

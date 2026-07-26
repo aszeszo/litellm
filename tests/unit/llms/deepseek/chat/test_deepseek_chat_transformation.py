@@ -907,3 +907,13 @@ def test_get_complete_url_ignores_a_trailing_slash_on_api_base(api_base: str):
         )
         == "https://gateway.example.com/deepseek/chat/completions"
     )
+
+
+def test_reasoning_effort_controls_thinking_and_is_preserved_for_effort_models():
+    config = DeepSeekChatConfig()
+
+    high = config.map_openai_params({"reasoning_effort": "high"}, {}, "deepseek-v4-pro", True)
+    disabled = config.map_openai_params({"reasoning_effort": "none"}, {}, "deepseek-v4-pro", True)
+
+    assert high == {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    assert disabled == {"thinking": {"type": "disabled"}}

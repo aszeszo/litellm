@@ -59,6 +59,9 @@ class DeepSeekChatConfig(OpenAIGPTConfig):
         elif reasoning_effort is not None:
             optional_params["thinking"] = {"type": "disabled" if reasoning_effort == "none" else "enabled"}
 
+        if reasoning_effort not in (None, "none") and model.startswith(("deepseek-v4-", "kimi-k2.7-code", "mimo-")):
+            optional_params["reasoning_effort"] = reasoning_effort
+
         return optional_params
 
     def _fill_reasoning_content(self, messages: list[AllMessageValues]) -> list[AllMessageValues]:

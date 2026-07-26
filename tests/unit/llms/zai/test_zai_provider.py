@@ -9,6 +9,7 @@ import pytest
 import litellm
 from litellm import completion
 from litellm.cost_calculator import cost_per_token
+from litellm.llms.zai.chat.transformation import ZAIChatConfig
 
 
 @pytest.fixture
@@ -53,6 +54,21 @@ def test_zai_in_provider_lists():
     """Test that zai is registered in all necessary provider lists"""
     assert "zai" in litellm.openai_compatible_providers
     assert "zai" in litellm.provider_list
+
+
+def test_zai_reasoning_effort_maps_to_thinking_and_glm52_effort():
+    config = ZAIChatConfig()
+
+    low = config.map_openai_params({"reasoning_effort": "low"}, {}, "glm-5.2", True)
+    maximum = config.map_openai_params({"reasoning_effort": "max"}, {}, "glm-5.2", True)
+    disabled = config.map_openai_params({"reasoning_effort": "none"}, {}, "glm-5.2", True)
+    toggle_only = config.map_openai_params({"reasoning_effort": "high"}, {}, "glm-5.1", True)
+
+    assert {"thinking", "reasoning_effort"} <= set(config.get_supported_openai_params("glm-5.2"))
+    assert low == {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+    assert maximum == {"thinking": {"type": "enabled"}, "reasoning_effort": "max"}
+    assert disabled == {"thinking": {"type": "disabled"}}
+    assert toggle_only == {"thinking": {"type": "enabled"}}
 
 
 @pytest.mark.asyncio
