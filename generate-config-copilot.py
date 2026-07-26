@@ -27,6 +27,7 @@ from litellm.llms.github_copilot.common_utils import (
 
 class ModelOverride(TypedDict, total=False):
     skip: bool
+    model_id: str
     codex_visibility: Literal["list", "hide"]
     codex_description: str
 
@@ -177,10 +178,12 @@ def codex_api_metadata(metadata: JsonObject, mode: str) -> JsonObject:
 
 def apply_codex_overrides(model: CopilotModel, metadata: JsonObject) -> JsonObject:
     override = MODEL_OVERRIDES.get(model.id, {})
+    model_id = override.get("model_id")
     visibility = override.get("codex_visibility")
     description = override.get("codex_description")
     return {
         **metadata,
+        **({"id": model_id, "slug": model_id} if model_id is not None else {}),
         **({"visibility": visibility} if visibility is not None else {}),
         **({"description": description} if description is not None else {}),
     }
@@ -202,6 +205,10 @@ def model_mode(model: CopilotModel, endpoints: tuple[str, ...]) -> str:
     if model.capabilities.model_extra.get("type") == "embeddings":
         return "embedding"
     return "chat"
+
+
+def public_model_id(model: CopilotModel) -> str:
+    return MODEL_OVERRIDES.get(model.id, {}).get("model_id", model.id)
 
 
 def reasoning_model_info(model: CopilotModel) -> JsonObject:
@@ -232,7 +239,7 @@ def build_config(
     references = {model.slug: model for model in chatgpt_models}
     entries: list[JsonValue] = [
         {
-            "model_name": model.id,
+            "model_name": public_model_id(model),
             "litellm_params": {"model": f"github_copilot/{model.id}"},
             "model_info": {
                 "cache_creation_input_token_cost": 0,
