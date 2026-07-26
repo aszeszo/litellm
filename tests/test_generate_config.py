@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 
 class GeneratedModelInfo(TypedDict):
+    cache_creation_input_token_cost: int
+    cache_read_input_token_cost: int
     codex: dict[str, object]
 
 
@@ -127,6 +129,8 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
     assert [preset["effort"] for preset in reasoning] == ["none", "low", "medium", "high", "max"]
     assert rows["mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["litellm_params"]["api_base"] == "http://localhost:9090/v1"
+    assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_creation_input_token_cost"] == 0
+    assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_read_input_token_cost"] == 0
     assert rows["gpt-5.5"]["model_info"]["codex"]["priority"] == 4
     assert rows["deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 9
     assert rows["glm-5.2"]["model_info"]["codex"]["priority"] == 17

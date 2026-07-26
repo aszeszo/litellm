@@ -855,6 +855,8 @@ def local_entry(model: LocalModel, model_name: str, metadata: JsonObject) -> Jso
             "api_key": model["api_key"],
         },
         "model_info": {
+            "cache_creation_input_token_cost": 0,
+            "cache_read_input_token_cost": 0,
             "mode": "chat",
             "supported_endpoints": ["/v1/chat/completions"],
             "supports_reasoning": bool(model["reasoning_levels"]),
