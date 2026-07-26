@@ -92,6 +92,7 @@ def test_work_mode_contains_only_unprefixed_copilot_models(generator: GeneratorM
     rows = config["model_list"]
     assert rows[0]["model_name"] == "gpt-5.5"
     assert rows[0]["model_info"]["codex"]["slug"] == "gpt-5.5"
+    assert {row["model_name"] for row in rows} == {"gpt-5.5", "gpt-5.2"}
     assert all("/" not in row["model_name"] for row in rows)
 
 
@@ -113,7 +114,6 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
     assert set(rows) == {
         "chatgpt/gpt-5.5",
         "copilot/gpt-5.5",
-        "copilot/gpt-5.2",
         "deepseek/deepseek-v4-pro",
         "zai/glm-5.2",
         "xiaomi/mimo-v2.5-pro",

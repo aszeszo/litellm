@@ -117,7 +117,8 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
         )
     },
 }
-DUMMY_MODELS: frozenset[str] = frozenset({"gpt-5.2"})
+DUMMY_MODELS: frozenset[str] = frozenset()
+DUMMY_MODELS_WORK: frozenset[str] = frozenset({"gpt-5.2"})
 
 
 class LocalModel(TypedDict):
@@ -384,7 +385,9 @@ def dummy_codex_metadata(model_id: str) -> JsonObject:
     }
 
 
-def dummy_model_entries(copilot_models: tuple[CopilotModel, ...], prefix: str) -> list[JsonValue]:
+def dummy_model_entries(
+    copilot_models: tuple[CopilotModel, ...], prefix: str, dummy_models: frozenset[str]
+) -> list[JsonValue]:
     available_model_ids = frozenset(model.id for model in copilot_models)
     return [
         {
@@ -396,7 +399,7 @@ def dummy_model_entries(copilot_models: tuple[CopilotModel, ...], prefix: str) -
                 "codex": dummy_codex_metadata(f"{prefix}{model_id}"),
             },
         }
-        for model_id in sorted(DUMMY_MODELS - available_model_ids)
+        for model_id in sorted(dummy_models - available_model_ids)
     ]
 
 
@@ -447,6 +450,7 @@ def copilot_entries(
     chatgpt_models: tuple[ChatGPTModel, ...],
     overrides: dict[ModelKey, ModelOverride],
     prefix: str,
+    dummy_models: frozenset[str],
 ) -> list[JsonValue]:
     if not chatgpt_models:
         raise RuntimeError("ChatGPT model metadata does not contain any models")
@@ -470,7 +474,7 @@ def copilot_entries(
         if not overrides.get(("github_copilot", model.id), {}).get("skip", False)
         for alias in overrides.get(("github_copilot", model.id), {}).get("aliases", [])
     ]
-    return [*entries, *aliases, *dummy_model_entries(copilot_models, prefix)]
+    return [*entries, *aliases, *dummy_model_entries(copilot_models, prefix, dummy_models)]
 
 
 ADDITIONAL_PROVIDER_BASE_URLS: dict[ProviderName, str] = {
@@ -717,7 +721,13 @@ def build_config(
         raise RuntimeError("Codex model metadata does not contain any models")
     overrides = MODEL_OVERRIDES_WORK if work else MODEL_OVERRIDES
     default_model = min(chatgpt_models, key=lambda model: model.priority)
-    copilot = copilot_entries(copilot_models, chatgpt_models, overrides, "" if work else "copilot/")
+    copilot = copilot_entries(
+        copilot_models,
+        chatgpt_models,
+        overrides,
+        "" if work else "copilot/",
+        DUMMY_MODELS_WORK if work else DUMMY_MODELS,
+    )
     if work:
         return {**CONFIG, "model_list": [*copilot, *local_entries(LOCAL_MODELS_WORK, default_model, overrides)]}
     return {
