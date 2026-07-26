@@ -39,14 +39,14 @@ CONFIG: dict[str, JsonValue] = {
     "model_list": [],
 }
 MODEL_OVERRIDES: dict[str, ModelOverride] = {
-    "gpt-5.6-sol": {"codex_priority": 1, "codex_description": "GPT-5.6 Sol"},
-    "gpt-5.6-terra": {"codex_priority": 2, "codex_description": "GPT-5.6 Terra"},
-    "gpt-5.6-luna": {"codex_priority": 3, "codex_description": "GPT-5.6 Luna"},
-    "gpt-5.5": {"codex_priority": 7, "codex_description": "GPT-5.5"},
-    "gpt-5.4": {"codex_priority": 16, "codex_description": "GPT-5.4"},
-    "gpt-5.4-mini": {"codex_priority": 23, "codex_description": "GPT-5.4 mini"},
-    "gpt-5.3-codex": {"codex_priority": 100, "codex_description": "GPT-5.3-Codex"},
-    "gpt-5-mini": {"codex_priority": 101, "codex_description": "GPT-5 mini"},
+    "gpt-5.6-sol": {"codex_priority": 101, "codex_description": "GPT-5.6 Sol"},
+    "gpt-5.6-terra": {"codex_priority": 102, "codex_description": "GPT-5.6 Terra"},
+    "gpt-5.6-luna": {"codex_priority": 103, "codex_description": "GPT-5.6 Luna"},
+    "gpt-5.5": {"codex_priority": 104, "codex_description": "GPT-5.5"},
+    "gpt-5.4": {"codex_priority": 105, "codex_description": "GPT-5.4"},
+    "gpt-5.4-mini": {"codex_priority": 106, "codex_description": "GPT-5.4 mini"},
+    "gpt-5.3-codex": {"codex_priority": 107, "codex_description": "GPT-5.3-Codex"},
+    "gpt-5-mini": {"codex_priority": 108, "codex_description": "GPT-5 mini"},
     "mai-code-1-flash-picker": {"codex_priority": 200, "codex_description": "MAI-Code-1-Flash"},
     "claude-opus-5": {"codex_priority": 301, "codex_description": "Claude Opus 5"},
     "claude-opus-4.8": {"codex_priority": 302, "codex_description": "Claude Opus 4.8"},
@@ -83,6 +83,7 @@ MODEL_OVERRIDES: dict[str, ModelOverride] = {
     "gpt-4o": {"skip": True},
     "text-embedding-ada-002": {"skip": True},
 }
+DUMMY_MODELS: frozenset[str] = frozenset({"gpt-5.2"})
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 CHATGPT_MODELS_FILE = SCRIPT_DIRECTORY / "list-chatgpt-models.json"
@@ -276,6 +277,43 @@ def reasoning_model_info(model: CopilotModel) -> JsonObject:
     }
 
 
+def dummy_codex_metadata(model_id: str) -> JsonObject:
+    return {
+        "slug": model_id,
+        "display_name": model_id,
+        "description": None,
+        "supported_reasoning_levels": [],
+        "shell_type": "shell_command",
+        "visibility": "hide",
+        "supported_in_api": True,
+        "priority": 0,
+        "upgrade": None,
+        "base_instructions": "",
+        "support_verbosity": False,
+        "default_verbosity": None,
+        "apply_patch_tool_type": None,
+        "truncation_policy": {"mode": "bytes", "limit": 10000},
+        "supports_parallel_tool_calls": False,
+        "experimental_supported_tools": [],
+    }
+
+
+def dummy_model_entries(copilot_models: tuple[CopilotModel, ...]) -> list[JsonValue]:
+    available_model_ids = frozenset(model.id for model in copilot_models)
+    return [
+        {
+            "model_name": model_id,
+            "litellm_params": {"model": f"github_copilot/{model_id}"},
+            "model_info": {
+                "cache_creation_input_token_cost": 0,
+                "cache_read_input_token_cost": 0,
+                "codex": dummy_codex_metadata(model_id),
+            },
+        }
+        for model_id in sorted(DUMMY_MODELS - available_model_ids)
+    ]
+
+
 def build_config(
     copilot_models: tuple[CopilotModel, ...], chatgpt_models: tuple[ChatGPTModel, ...]
 ) -> dict[str, JsonValue]:
@@ -313,7 +351,7 @@ def build_config(
         for endpoints in (normalized_endpoints(model),)
         for mode in (model_mode(model, endpoints),)
     ]
-    return {**CONFIG, "model_list": entries}
+    return {**CONFIG, "model_list": [*entries, *dummy_model_entries(copilot_models)]}
 
 
 def write_config(config: dict[str, JsonValue], path: Path = OUTPUT_FILE) -> None:
