@@ -8,11 +8,10 @@
 # ]
 # ///
 
-import argparse
 import json
 import sys
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import NotRequired, TypedDict, cast
 
 import httpx
 import yaml
@@ -23,6 +22,54 @@ from litellm.llms.chatgpt.common_utils import get_chatgpt_default_headers
 
 class ChatGPTModelsResponse(TypedDict):
     models: list[dict[str, object]]
+
+
+class ModelAlias(TypedDict):
+    model_name: str
+    model: str
+    display_name: NotRequired[str]
+
+
+class ModelOverrides(TypedDict):
+    aliases: list[ModelAlias]
+
+
+MODEL_OVERRIDES: ModelOverrides = {
+    "aliases": [
+        {"model_name": "codex", "model": "chatgpt/gpt-5", "display_name": "Codex"},
+        {
+            "model_name": "codex-claude",
+            "model": "chatgpt/claude-opus-4",
+            "display_name": "Codex Claude",
+        },
+        {
+            "model_name": "codex-sonnet",
+            "model": "chatgpt/claude-sonnet-4",
+            "display_name": "Codex Sonnet",
+        },
+    ],
+}
+
+
+REQUIRED_CODEX_METADATA: dict[str, object] = {
+    "slug": "",
+    "display_name": "",
+    "description": None,
+    "supported_reasoning_levels": [],
+    "shell_type": "shell_command",
+    "visibility": "hide",
+    "supported_in_api": True,
+    "priority": 99,
+    "availability_nux": None,
+    "upgrade": None,
+    "base_instructions": "",
+    "support_verbosity": False,
+    "default_verbosity": None,
+    "apply_patch_tool_type": None,
+    "truncation_policy": {"mode": "bytes", "limit": 10_000},
+    "supports_parallel_tool_calls": False,
+    "experimental_supported_tools": [],
+}
 
 
 def load_models() -> list[dict[str, object]]:
@@ -47,14 +94,7 @@ def load_models() -> list[dict[str, object]]:
     return models
 
 
-def parse_alias(value: str) -> tuple[str, str]:
-    name, separator, model = value.partition("=")
-    if not separator or not name or not model:
-        raise argparse.ArgumentTypeError("alias must use NAME=MODEL")
-    return name, model
-
-
-def model_list(models: list[dict[str, object]], aliases: list[tuple[str, str]]) -> dict[str, object]:
+def model_list(models: list[dict[str, object]]) -> dict[str, object]:
     template = next((model for model in models if isinstance(model.get("slug"), str)), {})
     return {
         "model_list": [
@@ -71,26 +111,25 @@ def model_list(models: list[dict[str, object]], aliases: list[tuple[str, str]]) 
                 "model_name": name,
                 "litellm_params": {"model": target},
                 "model_info": {
-                    "codex": template
+                    "codex": REQUIRED_CODEX_METADATA
+                    | template
                     | {
                         "slug": name,
-                        "display_name": name,
+                        "display_name": alias.get("display_name", name),
                         "description": f"Hidden alias for {target}",
                         "visibility": "hide",
                     }
                 },
             }
-            for name, target in aliases
+            for alias in MODEL_OVERRIDES["aliases"]
+            if (name := alias["model_name"]) and (target := alias["model"])
         ],
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--alias", action="append", default=[], type=parse_alias, metavar="NAME=MODEL")
-    aliases = cast(list[tuple[str, str]], parser.parse_args().alias)
     try:
-        yaml.safe_dump(model_list(load_models(), aliases), sys.stdout, sort_keys=False, allow_unicode=True)
+        yaml.safe_dump(model_list(load_models()), sys.stdout, sort_keys=False, allow_unicode=True)
     except Exception as error:
         sys.stderr.write(f"list-chatgpt-models: {error}\n")
         return 1
