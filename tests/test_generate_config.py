@@ -132,10 +132,10 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_creation_input_token_cost"] == 0
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_read_input_token_cost"] == 0
     assert rows["gpt-5.5"]["model_info"]["codex"]["priority"] == 4
-    assert rows["deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 9
-    assert rows["glm-5.2"]["model_info"]["codex"]["priority"] == 17
-    assert rows["mimo-v2.5-pro"]["model_info"]["codex"]["priority"] == 19
-    assert rows["kimi-k3"]["model_info"]["codex"]["priority"] == 23
+    assert rows["deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 8
+    assert rows["glm-5.2"]["model_info"]["codex"]["priority"] == 10
+    assert rows["mimo-v2.5-pro"]["model_info"]["codex"]["priority"] == 18
+    assert rows["kimi-k3"]["model_info"]["codex"]["priority"] == 20
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["codex"]["priority"] == 24
     assert rows["deepseek-v4-pro"]["model_info"]["codex"]["description"] == "DeepSeek-V4-Pro"
     assert rows["glm-5.2"]["model_info"]["codex"]["description"] == "GLM-5.2"
