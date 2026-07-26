@@ -114,25 +114,29 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
 
     rows = {row["model_name"]: row for row in config["model_list"]}
     assert set(rows) == {
-        "chatgpt/gpt-5.5",
+        "gpt-5.5",
         "copilot/gpt-5.5",
-        "deepseek/deepseek-v4-pro",
-        "zai/glm-5.2",
-        "xiaomi/mimo-v2.5-pro",
-        "moonshotai/kimi-k3",
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "mimo-v2.5-pro",
+        "kimi-k3",
         "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
         "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
     }
-    reasoning = cast(list[dict[str, str]], rows["zai/glm-5.2"]["model_info"]["codex"]["supported_reasoning_levels"])
+    reasoning = cast(list[dict[str, str]], rows["glm-5.2"]["model_info"]["codex"]["supported_reasoning_levels"])
     assert [preset["effort"] for preset in reasoning] == ["none", "low", "medium", "high", "max"]
-    assert rows["xiaomi/mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
+    assert rows["mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["litellm_params"]["api_base"] == "http://localhost:9090/v1"
-    assert rows["chatgpt/gpt-5.5"]["model_info"]["codex"]["priority"] == 4
-    assert rows["deepseek/deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 9
-    assert rows["zai/glm-5.2"]["model_info"]["codex"]["priority"] == 17
-    assert rows["xiaomi/mimo-v2.5-pro"]["model_info"]["codex"]["priority"] == 19
-    assert rows["moonshotai/kimi-k3"]["model_info"]["codex"]["priority"] == 23
+    assert rows["gpt-5.5"]["model_info"]["codex"]["priority"] == 4
+    assert rows["deepseek-v4-pro"]["model_info"]["codex"]["priority"] == 9
+    assert rows["glm-5.2"]["model_info"]["codex"]["priority"] == 17
+    assert rows["mimo-v2.5-pro"]["model_info"]["codex"]["priority"] == 19
+    assert rows["kimi-k3"]["model_info"]["codex"]["priority"] == 23
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["codex"]["priority"] == 24
+    assert rows["deepseek-v4-pro"]["model_info"]["codex"]["description"] == "DeepSeek-V4-Pro"
+    assert rows["glm-5.2"]["model_info"]["codex"]["description"] == "GLM-5.2"
+    assert rows["mimo-v2.5-pro"]["model_info"]["codex"]["description"] == "MiMo-V2.5-Pro"
+    assert rows["kimi-k3"]["model_info"]["codex"]["description"] == "Kimi K3"
 
 
 def test_provider_scoped_overrides_do_not_collide(generator: GeneratorModule, monkeypatch: pytest.MonkeyPatch):
@@ -179,7 +183,7 @@ def test_default_mode_can_disable_copilot_models(generator: GeneratorModule, mon
     )
 
     assert [row["model_name"] for row in config["model_list"]] == [
-        "chatgpt/gpt-5.5",
+        "gpt-5.5",
         "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
         "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
     ]
