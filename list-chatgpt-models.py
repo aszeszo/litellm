@@ -11,7 +11,7 @@
 import json
 import sys
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
+from typing import TypedDict, cast
 
 import httpx
 import yaml
@@ -22,69 +22,6 @@ from litellm.llms.chatgpt.common_utils import get_chatgpt_default_headers
 
 class ChatGPTModelsResponse(TypedDict):
     models: list[dict[str, object]]
-
-
-class ModelAlias(TypedDict):
-    model_name: str
-    model: str
-    display_name: NotRequired[str]
-
-
-class ModelOverrides(TypedDict):
-    aliases: list[ModelAlias]
-
-
-MODEL_OVERRIDES: ModelOverrides = {
-    "aliases": [
-        {"model_name": "codex", "model": "chatgpt/gpt-5", "display_name": "Codex"},
-        {
-            "model_name": "codex-claude",
-            "model": "chatgpt/claude-opus-4",
-            "display_name": "Codex Claude",
-        },
-        {
-            "model_name": "codex-sonnet",
-            "model": "chatgpt/claude-sonnet-4",
-            "display_name": "Codex Sonnet",
-        },
-        {
-            "model_name": "claude-haiku-4-5-20251001",
-            "model": "chatgpt/claude-haiku-4.5",
-            "display_name": "Claude Haiku 4.5",
-        },
-        {
-            "model_name": "claude-sonnet-5[1m]",
-            "model": "chatgpt/claude-sonnet-5",
-            "display_name": "Claude Sonnet 5 [1m]",
-        },
-        {
-            "model_name": "claude-opus-5[1m]",
-            "model": "chatgpt/claude-opus-5",
-            "display_name": "Claude Opus 5 [1m]",
-        },
-    ],
-}
-
-
-REQUIRED_CODEX_METADATA: dict[str, object] = {
-    "slug": "",
-    "display_name": "",
-    "description": None,
-    "supported_reasoning_levels": [],
-    "shell_type": "shell_command",
-    "visibility": "hide",
-    "supported_in_api": True,
-    "priority": 99,
-    "availability_nux": None,
-    "upgrade": None,
-    "base_instructions": "",
-    "support_verbosity": False,
-    "default_verbosity": None,
-    "apply_patch_tool_type": None,
-    "truncation_policy": {"mode": "bytes", "limit": 10_000},
-    "supports_parallel_tool_calls": False,
-    "experimental_supported_tools": [],
-}
 
 
 def load_models() -> list[dict[str, object]]:
@@ -110,7 +47,6 @@ def load_models() -> list[dict[str, object]]:
 
 
 def model_list(models: list[dict[str, object]]) -> dict[str, object]:
-    template = next((model for model in models if isinstance(model.get("slug"), str)), {})
     return {
         "model_list": [
             {
@@ -121,24 +57,6 @@ def model_list(models: list[dict[str, object]]) -> dict[str, object]:
             for model in models
             if isinstance((slug := model.get("slug")), str) and slug
         ]
-        + [
-            {
-                "model_name": name,
-                "litellm_params": {"model": target},
-                "model_info": {
-                    "codex": REQUIRED_CODEX_METADATA
-                    | template
-                    | {
-                        "slug": name,
-                        "display_name": alias.get("display_name", name),
-                        "description": f"Hidden alias for {target}",
-                        "visibility": "hide",
-                    }
-                },
-            }
-            for alias in MODEL_OVERRIDES["aliases"]
-            if (name := alias["model_name"]) and (target := alias["model"])
-        ],
     }
 
 

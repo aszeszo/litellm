@@ -28,6 +28,7 @@ from litellm.llms.github_copilot.common_utils import (
 class ModelOverride(TypedDict, total=False):
     skip: bool
     model_id: str
+    aliases: list[str]
     codex_visibility: Literal["list", "hide"]
     codex_description: str
     codex_priority: int
@@ -48,16 +49,28 @@ MODEL_OVERRIDES: dict[str, ModelOverride] = {
     "gpt-5.3-codex": {"codex_priority": 107, "codex_description": "GPT-5.3-Codex"},
     "gpt-5-mini": {"codex_priority": 108, "codex_description": "GPT-5 mini"},
     "mai-code-1-flash-picker": {"codex_priority": 200, "codex_description": "MAI-Code-1-Flash"},
-    "claude-opus-5": {"codex_priority": 301, "codex_description": "Claude Opus 5"},
+    "claude-opus-5": {
+        "aliases": ["claude-opus-5[1m]"],
+        "codex_priority": 301,
+        "codex_description": "Claude Opus 5",
+    },
     "claude-opus-4.8": {"codex_priority": 302, "codex_description": "Claude Opus 4.8"},
     "claude-opus-4.8-fast": {"codex_priority": 303, "codex_description": "Claude Opus 4.8 (fast mode)"},
     "claude-opus-4.7": {"codex_priority": 304, "codex_description": "Claude Opus 4.7"},
     "claude-opus-4.6": {"codex_priority": 305, "codex_description": "Claude Opus 4.6"},
     "claude-opus-4.5": {"codex_priority": 306, "codex_description": "Claude Opus 4.5"},
-    "claude-sonnet-5": {"codex_priority": 307, "codex_description": "Claude Sonnet 5"},
+    "claude-sonnet-5": {
+        "aliases": ["claude-sonnet-5[1m]"],
+        "codex_priority": 307,
+        "codex_description": "Claude Sonnet 5",
+    },
     "claude-sonnet-4.6": {"codex_priority": 308, "codex_description": "Claude Sonnet 4.6"},
     "claude-sonnet-4.5": {"codex_priority": 309, "codex_description": "Claude Sonnet 4.5"},
-    "claude-haiku-4.5": {"codex_priority": 310, "codex_description": "Claude Haiku 4.5"},
+    "claude-haiku-4.5": {
+        "aliases": ["claude-haiku-4-5-20251001"],
+        "codex_priority": 310,
+        "codex_description": "Claude Haiku 4.5",
+    },
     "gemini-3.1-pro-preview": {"codex_priority": 401, "codex_description": "Gemini 3.1 Pro (Preview)"},
     "gemini-3.5-flash": {"codex_priority": 402, "codex_description": "Gemini 3.5 Flash"},
     "gemini-3.6-flash": {"codex_priority": 403, "codex_description": "Gemini 3.6 Flash"},
@@ -314,6 +327,41 @@ def dummy_model_entries(copilot_models: tuple[CopilotModel, ...]) -> list[JsonVa
     ]
 
 
+def model_entry(
+    model: CopilotModel,
+    default_model: ChatGPTModel,
+    references: dict[str, ChatGPTModel],
+    model_name: str,
+    hidden_alias: bool = False,
+) -> JsonObject:
+    endpoints = normalized_endpoints(model)
+    mode = model_mode(model, endpoints)
+    metadata = apply_codex_overrides(
+        model,
+        codex_api_metadata(
+            apply_copilot_limits(
+                codex_metadata(references[model.id])
+                if model.id in references
+                else copilot_codex_metadata(model, default_model),
+                model.capabilities.limits,
+            ),
+            mode,
+        ),
+    )
+    return {
+        "model_name": model_name,
+        "litellm_params": {"model": f"github_copilot/{model.id}"},
+        "model_info": {
+            "cache_creation_input_token_cost": 0,
+            "cache_read_input_token_cost": 0,
+            "mode": mode,
+            "supported_endpoints": list(endpoints),
+            **reasoning_model_info(model),
+            "codex": {**metadata, "slug": model_name, "visibility": "hide"} if hidden_alias else metadata,
+        },
+    }
+
+
 def build_config(
     copilot_models: tuple[CopilotModel, ...], chatgpt_models: tuple[ChatGPTModel, ...]
 ) -> dict[str, JsonValue]:
@@ -323,35 +371,17 @@ def build_config(
     default_model = min(chatgpt_models, key=lambda model: model.priority)
     references = {model.slug: model for model in chatgpt_models}
     entries: list[JsonValue] = [
-        {
-            "model_name": public_model_id(model),
-            "litellm_params": {"model": f"github_copilot/{model.id}"},
-            "model_info": {
-                "cache_creation_input_token_cost": 0,
-                "cache_read_input_token_cost": 0,
-                "mode": mode,
-                "supported_endpoints": list(endpoints),
-                **reasoning_model_info(model),
-                "codex": apply_codex_overrides(
-                    model,
-                    codex_api_metadata(
-                        apply_copilot_limits(
-                            codex_metadata(references[model.id])
-                            if model.id in references
-                            else copilot_codex_metadata(model, default_model),
-                            model.capabilities.limits,
-                        ),
-                        mode,
-                    ),
-                ),
-            },
-        }
+        model_entry(model, default_model, references, public_model_id(model))
         for model in copilot_models
         if not MODEL_OVERRIDES.get(model.id, {}).get("skip", False)
-        for endpoints in (normalized_endpoints(model),)
-        for mode in (model_mode(model, endpoints),)
     ]
-    return {**CONFIG, "model_list": [*entries, *dummy_model_entries(copilot_models)]}
+    aliases: list[JsonValue] = [
+        model_entry(model, default_model, references, alias, hidden_alias=True)
+        for model in copilot_models
+        if not MODEL_OVERRIDES.get(model.id, {}).get("skip", False)
+        for alias in MODEL_OVERRIDES.get(model.id, {}).get("aliases", [])
+    ]
+    return {**CONFIG, "model_list": [*entries, *aliases, *dummy_model_entries(copilot_models)]}
 
 
 def write_config(config: dict[str, JsonValue], path: Path = OUTPUT_FILE) -> None:
