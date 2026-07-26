@@ -47,6 +47,21 @@ MODEL_OVERRIDES: ModelOverrides = {
             "model": "chatgpt/claude-sonnet-4",
             "display_name": "Codex Sonnet",
         },
+        {
+            "model_name": "claude-haiku-4-5-20251001",
+            "model": "chatgpt/claude-haiku-4.5",
+            "display_name": "Claude Haiku 4.5",
+        },
+        {
+            "model_name": "claude-sonnet-5[1m]",
+            "model": "chatgpt/claude-sonnet-5",
+            "display_name": "Claude Sonnet 5 [1m]",
+        },
+        {
+            "model_name": "claude-opus-5[1m]",
+            "model": "chatgpt/claude-opus-5",
+            "display_name": "Claude Opus 5 [1m]",
+        },
     ],
 }
 
