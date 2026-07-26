@@ -8,6 +8,7 @@
 # ]
 # ///
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -46,7 +47,15 @@ def load_models() -> list[dict[str, object]]:
     return models
 
 
-def model_list(models: list[dict[str, object]]) -> dict[str, object]:
+def parse_alias(value: str) -> tuple[str, str]:
+    name, separator, model = value.partition("=")
+    if not separator or not name or not model:
+        raise argparse.ArgumentTypeError("alias must use NAME=MODEL")
+    return name, model
+
+
+def model_list(models: list[dict[str, object]], aliases: list[tuple[str, str]]) -> dict[str, object]:
+    template = next((model for model in models if isinstance(model.get("slug"), str)), {})
     return {
         "model_list": [
             {
@@ -57,12 +66,31 @@ def model_list(models: list[dict[str, object]]) -> dict[str, object]:
             for model in models
             if isinstance((slug := model.get("slug")), str) and slug
         ]
+        + [
+            {
+                "model_name": name,
+                "litellm_params": {"model": target},
+                "model_info": {
+                    "codex": template
+                    | {
+                        "slug": name,
+                        "display_name": name,
+                        "description": f"Hidden alias for {target}",
+                        "visibility": "hide",
+                    }
+                },
+            }
+            for name, target in aliases
+        ],
     }
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--alias", action="append", default=[], type=parse_alias, metavar="NAME=MODEL")
+    aliases = cast(list[tuple[str, str]], parser.parse_args().alias)
     try:
-        yaml.safe_dump(model_list(load_models()), sys.stdout, sort_keys=False, allow_unicode=True)
+        yaml.safe_dump(model_list(load_models(), aliases), sys.stdout, sort_keys=False, allow_unicode=True)
     except Exception as error:
         sys.stderr.write(f"list-chatgpt-models: {error}\n")
         return 1
