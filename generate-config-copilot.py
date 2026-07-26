@@ -151,6 +151,12 @@ def copilot_codex_metadata(model: CopilotModel, default_model: ChatGPTModel) -> 
     return JsonObjectAdapter.validate_python(merged)
 
 
+def codex_api_metadata(metadata: JsonObject, mode: str) -> JsonObject:
+    if mode == "responses":
+        return metadata
+    return {**metadata, "use_responses_lite": False}
+
+
 def normalized_endpoints(model: CopilotModel) -> tuple[str, ...]:
     aliases = {
         "/responses": "/v1/responses",
@@ -184,18 +190,22 @@ def build_config(
             "model_info": {
                 "cache_creation_input_token_cost": 0,
                 "cache_read_input_token_cost": 0,
-                "mode": model_mode(model, endpoints),
+                "mode": mode,
                 "supported_endpoints": list(endpoints),
-                "codex": apply_copilot_limits(
-                    codex_metadata(references[model.id])
-                    if model.id in references
-                    else copilot_codex_metadata(model, default_model),
-                    model.capabilities.limits,
+                "codex": codex_api_metadata(
+                    apply_copilot_limits(
+                        codex_metadata(references[model.id])
+                        if model.id in references
+                        else copilot_codex_metadata(model, default_model),
+                        model.capabilities.limits,
+                    ),
+                    mode,
                 ),
             },
         }
         for model in copilot_models
         for endpoints in (normalized_endpoints(model),)
+        for mode in (model_mode(model, endpoints),)
     ]
     return {**CONFIG, "model_list": entries}
 
