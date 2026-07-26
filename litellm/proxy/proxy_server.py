@@ -12236,6 +12236,33 @@ async def _deployment_hidden_by_listing_callbacks(deployment: Deployment, user_a
     return listed_name in await _names_hidden_by_listing_callbacks(user_api_key_dict, (listed_name,))
 
 
+def _client_specific_model_list(
+    request: Request,
+    model_names: List[str],
+    router: Optional[Router],
+    settings: dict[str, object],
+) -> Optional[dict[str, object]]:
+    if request.url.path != "/v1/models" or router is None:
+        return None
+
+    if "client_version" in request.query_params:
+        model_info_key, envelope_key = "codex", "models"
+    elif request.headers.get("anthropic-version") is not None:
+        model_info_key, envelope_key = "claude", "data"
+    else:
+        return None
+
+    listing_entries = TeamModelNameTranslator.listing_entries(model_names, router, settings)
+    models = tuple(
+        dict(client_model_info)
+        for _, lookup_id in listing_entries
+        for deployment in (router.get_model_list(model_name=lookup_id) or [])[:1]
+        if isinstance((model_info := deployment.get("model_info")), Mapping)
+        and isinstance((client_model_info := model_info.get(model_info_key)), Mapping)
+    )
+    return {envelope_key: models}
+
+
 @router.get("/v1/models", dependencies=[Depends(user_api_key_auth)], tags=["model management"])
 @router.get(
     "/models", dependencies=[Depends(user_api_key_auth)], tags=["model management"]
@@ -12389,6 +12416,10 @@ async def model_list(
         if hidden_names or expanded_undiscoverable_names:
             all_models = [m for m in all_models if m not in hidden_names and m not in expanded_undiscoverable_names]
 
+        client_model_list = _client_specific_model_list(request, all_models, llm_router, settings)
+        if client_model_list is not None:
+            return client_model_list
+
         # Surface the public team name by default; legacy internal keys via flag.
         # The internal routing key drives the metadata/fallback lookup, while the
         # public name is what the client sees as the model id.
@@ -12453,6 +12484,10 @@ async def model_list(
     )
     if hidden_names or undiscoverable_names:
         all_models = [m for m in all_models if m not in hidden_names and m not in undiscoverable_names]
+
+    client_model_list = _client_specific_model_list(request, all_models, llm_router, settings)
+    if client_model_list is not None:
+        return client_model_list
 
     # Surface the public team name by default; legacy internal keys via flag.
     # The internal routing key drives the metadata/fallback lookup, while the

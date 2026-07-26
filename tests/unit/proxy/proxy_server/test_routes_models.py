@@ -105,6 +105,31 @@ def test_get_models_happy_path(client, auth_as, patched_models, path):
     }
 
 
+@pytest.mark.parametrize(
+    ("request_kwargs", "model_info_key", "expected_key"),
+    [
+        ({"params": {"client_version": "0.144.0"}}, "codex", "models"),
+        ({"headers": {"anthropic-version": "2023-06-01"}}, "claude", "data"),
+    ],
+)
+def test_v1_models_uses_client_specific_schema(
+    client, auth_as, patched_models, request_kwargs, model_info_key, expected_key
+):
+    configured_info = {
+        "codex": {"slug": "gpt-4", "display_name": "GPT-4"},
+        "claude": {"id": "gpt-4", "display_name": "GPT-4", "type": "model"},
+    }
+    patched_models.get_model_list.side_effect = lambda model_name=None: [
+        {"model_name": model_name or "gpt-4", "litellm_params": {}, "model_info": configured_info}
+    ]
+
+    with auth_as():
+        response = client.get("/v1/models", **request_kwargs)
+
+    assert response.status_code == 200
+    assert response.json() == {expected_key: [configured_info[model_info_key]] * 2}
+
+
 @pytest.mark.parametrize("path", ["/v1/models", "/models"])
 def test_get_models_anthropic_format_when_header_present(
     client, auth_as, patched_models, path
