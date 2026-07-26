@@ -598,7 +598,7 @@ class LiteLLMCompletionResponsesConfig:
         return None
 
     @staticmethod
-    def _add_reasoning_content_to_assistant_messages(
+    def _add_reasoning_metadata_to_assistant_messages(
         messages: list[
             AllMessageValues
             | GenericChatCompletionMessage
@@ -623,7 +623,17 @@ class LiteLLMCompletionResponsesConfig:
                     | GenericChatCompletionMessage
                     | ChatCompletionMessageToolCall
                     | ChatCompletionResponseMessage,
-                    {**message, "reasoning_content": reasoning_content},
+                    {
+                        **message,
+                        "provider_specific_fields": {
+                            **(
+                                message.get("provider_specific_fields")
+                                if isinstance(message.get("provider_specific_fields"), dict)
+                                else {}
+                            ),
+                            "reasoning_content": reasoning_content,
+                        },
+                    },
                 )
                 if message.get("role") == "assistant"
                 else message
@@ -1210,7 +1220,7 @@ class LiteLLMCompletionResponsesConfig:
                 )
                 if pending_reasoning_content is not None:
                     chat_completion_messages, found_assistant = (
-                        LiteLLMCompletionResponsesConfig._add_reasoning_content_to_assistant_messages(
+                        LiteLLMCompletionResponsesConfig._add_reasoning_metadata_to_assistant_messages(
                             messages=chat_completion_messages,
                             reasoning_content=pending_reasoning_content,
                         )

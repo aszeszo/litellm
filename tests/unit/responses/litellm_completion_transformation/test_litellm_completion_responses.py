@@ -1181,7 +1181,8 @@ class TestFunctionCallTransformation:
         )
 
         assert len(messages) == 1
-        assert messages[0].get("reasoning_content") == expected
+        assert messages[0].get("reasoning_content") is None
+        assert messages[0].get("provider_specific_fields") == {"reasoning_content": expected}
 
     def test_reasoning_input_is_attached_to_parallel_tool_call_message(self):
         messages = LiteLLMCompletionResponsesConfig._transform_response_input_param_to_chat_completion_message(
@@ -1196,7 +1197,8 @@ class TestFunctionCallTransformation:
         )
 
         assert len(messages) == 1
-        assert messages[0].get("reasoning_content") == "tool reasoning"
+        assert messages[0].get("reasoning_content") is None
+        assert messages[0].get("provider_specific_fields") == {"reasoning_content": "tool reasoning"}
         assert len(messages[0].get("tool_calls", [])) == 2
 
     def test_unusable_reasoning_input_remains_ignored(self):

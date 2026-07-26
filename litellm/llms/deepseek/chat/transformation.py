@@ -68,18 +68,12 @@ class DeepSeekChatConfig(OpenAIGPTConfig):
     def _fill_reasoning_content(self, messages: list[AllMessageValues]) -> list[AllMessageValues]:
         """
         DeepSeek thinking mode requires `reasoning_content` to be passed back on
-        every assistant message in multi-turn conversations. If it is missing,
-        the API returns:
-          "The reasoning_content in the thinking mode must be passed back to the API."
-
-        For each assistant message that is missing `reasoning_content`:
-          1. Promote it from `provider_specific_fields["reasoning_content"]` if present
-             (LiteLLM stores provider-specific response fields there).
-          2. Otherwise inject a single space — the minimum value the API accepts.
+        assistant messages that contain tool calls.
         """
         result: Final[list[AllMessageValues]] = []
+        missing_reasoning_content = 0
         for msg in messages:
-            if msg.get("role") == "assistant" and not msg.get("reasoning_content"):
+            if msg.get("role") == "assistant" and msg.get("tool_calls") and not msg.get("reasoning_content"):
                 patched = dict(cast(dict, msg))
                 provider_fields = patched.get("provider_specific_fields") or {}
                 stored = provider_fields.get("reasoning_content")
@@ -89,20 +83,18 @@ class DeepSeekChatConfig(OpenAIGPTConfig):
                     cleaned.pop("reasoning_content", None)
                     patched["provider_specific_fields"] = cleaned
                 else:
-                    litellm.verbose_logger.warning(
-                        "DeepSeek thinking mode: assistant message is missing "
-                        "`reasoning_content` and none was saved in "
-                        "`provider_specific_fields`. A single-space placeholder "
-                        "is being injected to satisfy API validation, but the "
-                        "model will receive a blank reasoning chain for this turn, "
-                        "which may silently degrade multi-turn response quality. "
-                        "Preserve `reasoning_content` from the original assistant "
-                        "response when building multi-turn conversation history."
-                    )
                     patched["reasoning_content"] = " "
+                    missing_reasoning_content += 1
                 result.append(cast(AllMessageValues, patched))
             else:
                 result.append(msg)
+        if missing_reasoning_content:
+            litellm.verbose_logger.warning(
+                "DeepSeek thinking mode: %d assistant tool-call message(s) are missing "
+                "`reasoning_content`. A single-space placeholder was injected for API validation. "
+                "Preserve the original reasoning history to avoid degraded tool-call continuation quality.",
+                missing_reasoning_content,
+            )
         return result
 
     @overload

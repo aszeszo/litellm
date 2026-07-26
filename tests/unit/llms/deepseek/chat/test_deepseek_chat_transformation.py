@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator
 from typing import Final
+from unittest.mock import patch
 
 import httpx
 import litellm
@@ -919,3 +920,99 @@ def test_reasoning_effort_controls_thinking_and_is_preserved_for_effort_models()
     assert disabled == {"thinking": {"type": "disabled"}}
 
 
+def test_transform_request_adds_results_for_incomplete_parallel_tool_calls():
+    config = DeepSeekChatConfig()
+    body = config.transform_request(
+        model="deepseek-v4-flash",
+        messages=[
+            {"role": "user", "content": "inspect both"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_1", "type": "function", "function": {"name": "first", "arguments": "{}"}},
+                    {"id": "call_2", "type": "function", "function": {"name": "second", "arguments": "{}"}},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "first result"},
+            {"role": "user", "content": "continue"},
+        ],
+        optional_params={},
+        litellm_params={},
+        headers={},
+    )
+
+    assert [message.get("tool_call_id") for message in body["messages"] if message["role"] == "tool"] == [
+        "call_1",
+        "call_2",
+    ]
+    assert body["messages"][3]["content"] == (
+        "[System: Tool execution skipped/interrupted by user. No result provided for tool 'second'.]"
+    )
+
+
+async def test_async_transform_request_adds_missing_tool_result():
+    config = DeepSeekChatConfig()
+    body = await config.async_transform_request(
+        model="deepseek-v4-flash",
+        messages=[
+            {"role": "user", "content": "inspect"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {"id": "call_1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}}
+                ],
+            },
+        ],
+        optional_params={},
+        litellm_params={},
+        headers={},
+    )
+
+    assert body["messages"][-1]["role"] == "tool"
+    assert body["messages"][-1]["tool_call_id"] == "call_1"
+
+
+def test_thinking_mode_only_requires_reasoning_content_for_tool_calls():
+    config = DeepSeekChatConfig()
+    messages = [
+        {"role": "assistant", "content": "ordinary answer"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}}],
+            "provider_specific_fields": {"reasoning_content": "saved reasoning", "other": "value"},
+        },
+    ]
+
+    with patch("litellm.verbose_logger.warning") as warning:
+        result = config._fill_reasoning_content(messages)
+
+    assert result[0] == messages[0]
+    assert result[1]["reasoning_content"] == "saved reasoning"
+    assert result[1]["provider_specific_fields"] == {"other": "value"}
+    warning.assert_not_called()
+
+
+def test_missing_tool_call_reasoning_warns_once_per_request():
+    config = DeepSeekChatConfig()
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "first", "arguments": "{}"}}],
+        },
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "call_2", "type": "function", "function": {"name": "second", "arguments": "{}"}}],
+        },
+    ]
+
+    with patch("litellm.verbose_logger.warning") as warning:
+        result = config._fill_reasoning_content(messages)
+
+    assert [message["reasoning_content"] for message in result] == [" ", " "]
+    warning.assert_called_once()
+    assert warning.call_args.args[1] == 2
