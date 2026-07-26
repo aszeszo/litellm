@@ -134,9 +134,11 @@ def build_config(
             "model_name": model.id,
             "litellm_params": {"model": f"github_copilot/{model.id}"},
             "model_info": {
+                "cache_creation_input_token_cost": 0,
+                "cache_read_input_token_cost": 0,
                 "codex": apply_copilot_limits(
                     codex_metadata(references.get(model.id, default_model)), model.capabilities.limits
-                )
+                ),
             },
         }
         for model in copilot_models
