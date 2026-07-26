@@ -25,6 +25,7 @@ class GeneratorModule(Protocol):
     ChatGPTModel: type[BaseModel]
     CopilotModel: type[BaseModel]
     ENABLE_GITHUB_COPILOT: bool
+    DEFAULT_MODEL_PRIORITIES: dict[str, int]
     MODEL_OVERRIDES: dict[tuple[str, str], dict[str, object]]
     MODEL_OVERRIDES_WORK: dict[tuple[str, str], dict[str, object]]
     build_config: Callable[
@@ -120,10 +121,17 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
         "zai/glm-5.2",
         "xiaomi/mimo-v2.5-pro",
         "moonshotai/kimi-k3",
+        "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
+        "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
     }
     reasoning = cast(list[dict[str, str]], rows["zai/glm-5.2"]["model_info"]["codex"]["supported_reasoning_levels"])
     assert [preset["effort"] for preset in reasoning] == ["none", "low", "medium", "high", "max"]
     assert rows["xiaomi/mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
+    assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["litellm_params"]["api_base"] == "http://localhost:9090/v1"
+    for model_name, row in rows.items():
+        expected_priority = generator.DEFAULT_MODEL_PRIORITIES.get(model_name)
+        if expected_priority is not None:
+            assert row["model_info"]["codex"]["priority"] == expected_priority
 
 
 def test_provider_scoped_overrides_do_not_collide(generator: GeneratorModule, monkeypatch: pytest.MonkeyPatch):
@@ -167,4 +175,8 @@ def test_default_mode_can_disable_copilot_models(generator: GeneratorModule, mon
         False,
     )
 
-    assert [row["model_name"] for row in config["model_list"]] == ["chatgpt/gpt-5.5"]
+    assert [row["model_name"] for row in config["model_list"]] == [
+        "chatgpt/gpt-5.5",
+        "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
+        "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+    ]

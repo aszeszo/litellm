@@ -116,21 +116,42 @@ MODEL_OVERRIDES_WORK: dict[ModelKey, ModelOverride] = {
         )
     },
 }
-MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
-    (provider, model_id): cast(
-        ModelOverride,
-        {
-            **override,
-            **(
-                {"model_id": model_id}
-                if provider == "github_copilot"
-                and not model_id.startswith("gpt-")
-                and not override.get("skip", False)
-                else {}
+_INITIAL_MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
+    **{
+        (provider, model_id): cast(
+            ModelOverride,
+            {
+                **override,
+                **(
+                    {"model_id": model_id}
+                    if provider == "github_copilot"
+                    and not model_id.startswith("gpt-")
+                    and not override.get("skip", False)
+                    else {}
+                ),
+            },
+        )
+        for (provider, model_id), override in MODEL_OVERRIDES_WORK.items()
+    },
+    **{
+        cast(ModelKey, (provider, model_id)): {"model_id": f"{provider}/{model_id}"}
+        for provider, model_ids in {
+            "chatgpt": (
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
+                "gpt-5.5",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "codex-auto-review",
             ),
-        },
-    )
-    for (provider, model_id), override in MODEL_OVERRIDES_WORK.items()
+            "deepseek": ("deepseek-v4-flash", "deepseek-v4-pro"),
+            "zai": ("glm-4.5", "glm-4.5-air", "glm-4.6", "glm-4.7", "glm-5", "glm-5-turbo", "glm-5.1", "glm-5.2"),
+            "xiaomi": ("mimo-v2.5", "mimo-v2.5-pro"),
+            "moonshotai": ("kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k3"),
+        }.items()
+        for model_id in model_ids
+    },
 }
 ENABLE_GITHUB_COPILOT = True
 DUMMY_MODELS: frozenset[str] = frozenset()
@@ -146,8 +167,112 @@ class LocalModel(TypedDict):
     default_reasoning_level: str | None
 
 
-LOCAL_MODELS: list[LocalModel] = []
+LOCAL_MODELS: list[LocalModel] = [
+    {
+        "model_name": "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
+        "model": "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
+        "api_base": "http://localhost:9090/v1",
+        "api_key": "dummy",
+        "reasoning_levels": [],
+        "default_reasoning_level": None,
+    },
+    {
+        "model_name": "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+        "model": "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+        "api_base": "http://localhost:9090/v1",
+        "api_key": "dummy",
+        "reasoning_levels": [],
+        "default_reasoning_level": None,
+    },
+]
 LOCAL_MODELS_WORK: list[LocalModel] = []
+
+DEFAULT_MODEL_ORDER: tuple[str, ...] = (
+    "chatgpt/gpt-5.6-sol",
+    "chatgpt/gpt-5.6-terra",
+    "chatgpt/gpt-5.6-luna",
+    "chatgpt/gpt-5.5",
+    "chatgpt/gpt-5.4",
+    "chatgpt/gpt-5.4-mini",
+    "chatgpt/codex-auto-review",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
+    "zai/glm-4.5",
+    "zai/glm-4.5-air",
+    "zai/glm-4.6",
+    "zai/glm-4.7",
+    "zai/glm-5",
+    "zai/glm-5-turbo",
+    "zai/glm-5.1",
+    "zai/glm-5.2",
+    "xiaomi/mimo-v2.5",
+    "xiaomi/mimo-v2.5-pro",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "moonshotai/kimi-k2.7-code-highspeed",
+    "moonshotai/kimi-k3",
+    "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
+    "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+    "claude-opus-4.6",
+    "claude-opus-4.7",
+    "claude-opus-4.8-fast",
+    "claude-opus-4.8",
+    "claude-opus-5",
+    "claude-sonnet-4.6",
+    "claude-sonnet-5",
+    "claude-sonnet-4.5",
+    "claude-opus-4.5",
+    "claude-haiku-4.5",
+    "claude-opus-5[1m]",
+    "claude-sonnet-5[1m]",
+    "claude-haiku-4-5-20251001",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-pro",
+    "copilot/gpt-5.6-sol",
+    "copilot/gpt-5.6-terra",
+    "copilot/gpt-5.6-luna",
+    "copilot/gpt-5.5",
+    "copilot/gpt-5.4",
+    "copilot/gpt-5.4-mini",
+    "copilot/gpt-5.3-codex",
+    "copilot/gpt-5-mini",
+    "mai-code-1-flash-picker",
+)
+DEFAULT_MODEL_PRIORITIES = {model_name: priority for priority, model_name in enumerate(DEFAULT_MODEL_ORDER, 1)}
+MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
+    **{
+        key: cast(
+            ModelOverride,
+            {
+                **override,
+                **(
+                    {"codex_priority": priority}
+                    if (
+                        priority := DEFAULT_MODEL_PRIORITIES.get(
+                            override.get(
+                                "model_id",
+                                f"{'copilot/' if key[0] == 'github_copilot' else f'{key[0]}/'}{key[1]}",
+                            )
+                        )
+                    )
+                    is not None
+                    else {}
+                ),
+            },
+        )
+        for key, override in _INITIAL_MODEL_OVERRIDES.items()
+    },
+    **{
+        cast(ModelKey, ("local", model["model_name"])): {
+            "codex_priority": DEFAULT_MODEL_PRIORITIES[model["model_name"]]
+        }
+        for model in LOCAL_MODELS
+        if model["model_name"] in DEFAULT_MODEL_PRIORITIES
+    },
+}
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 CODEX_MODELS_FILE = SCRIPT_DIRECTORY / "generate-config-codex-models.json"
@@ -419,6 +544,21 @@ def dummy_model_entries(
     ]
 
 
+def public_codex_metadata(
+    metadata: JsonObject,
+    model_name: str,
+    overrides: dict[ModelKey, ModelOverride],
+    hidden: bool = False,
+) -> JsonObject:
+    priority = DEFAULT_MODEL_PRIORITIES.get(model_name) if overrides is MODEL_OVERRIDES else None
+    return {
+        **metadata,
+        "slug": model_name,
+        **({"priority": priority} if priority is not None else {}),
+        **({"visibility": "hide"} if hidden else {}),
+    }
+
+
 def model_entry(
     model: CopilotModel,
     default_model: ChatGPTModel,
@@ -452,11 +592,7 @@ def model_entry(
             "mode": mode,
             "supported_endpoints": list(endpoints),
             **reasoning_model_info(model),
-            "codex": {
-                **metadata,
-                "slug": model_name,
-                **({"visibility": "hide"} if hidden_alias else {}),
-            },
+            "codex": public_codex_metadata(metadata, model_name, overrides, hidden_alias),
         },
     }
 
@@ -633,7 +769,7 @@ def configured_entries_with_aliases(
                 provider,
                 model_id,
                 alias,
-                {**metadata, "slug": alias, "visibility": "hide"},
+                public_codex_metadata(metadata, alias, overrides, hidden=True),
                 api_key,
             )
             for alias in aliases
@@ -719,7 +855,7 @@ def local_entries(
         for entry in [
             local_entry(model, model_name, metadata),
             *(
-                local_entry(model, alias, {**metadata, "slug": alias, "visibility": "hide"})
+                local_entry(model, alias, public_codex_metadata(metadata, alias, overrides, hidden=True))
                 for alias in overrides.get(("local", model["model_name"]), {}).get("aliases", [])
             ),
         ]
