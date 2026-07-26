@@ -2446,6 +2446,7 @@ def _iter_tool_exchange_groups(messages: Sequence[Mapping[str, object]]) -> Iter
 
 def sanitize_messages_for_tool_calling(
     messages: list[AllMessageValues],
+    force: bool = False,
 ) -> list[AllMessageValues]:
     """
     Sanitize messages for tool calling to handle common issues when modify_params=True:
@@ -2469,7 +2470,7 @@ def sanitize_messages_for_tool_calling(
     This function operates on OpenAI format messages before they are converted to
     provider-specific formats.
     """
-    if not litellm.modify_params:
+    if not litellm.modify_params and not force:
         return messages
     sanitized_messages: Final = _pair_tool_calls_with_results(messages)
 

@@ -917,3 +917,5 @@ def test_reasoning_effort_controls_thinking_and_is_preserved_for_effort_models()
 
     assert high == {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
     assert disabled == {"thinking": {"type": "disabled"}}
+
+

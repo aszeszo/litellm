@@ -10,6 +10,7 @@ from litellm.litellm_core_utils.prompt_templates.common_utils import (
     convert_content_list_to_str,
     extract_search_results_text,
 )
+from litellm.litellm_core_utils.prompt_templates.factory import sanitize_messages_for_tool_calling
 from litellm.secret_managers.main import get_secret_str
 from litellm.types.llms.openai import AllMessageValues
 from litellm.utils import supports_reasoning, supports_vision
@@ -314,6 +315,7 @@ class DeepSeekChatConfig(OpenAIGPTConfig):
         like deepseek-v3.2 that support thinking as opt-in but not always-on.
         """
         optional_params = self._drop_unsupported_tools(optional_params)
+        messages = sanitize_messages_for_tool_calling(messages, force=True)
         if self._thinking_mode_active(model=model, optional_params=optional_params):
             messages = self._fill_reasoning_content(messages)
         return super().transform_request(
@@ -337,6 +339,7 @@ class DeepSeekChatConfig(OpenAIGPTConfig):
         fix for multi-turn thinking-mode conversations.
         """
         optional_params = self._drop_unsupported_tools(optional_params)
+        messages = sanitize_messages_for_tool_calling(messages, force=True)
         if self._thinking_mode_active(model=model, optional_params=optional_params):
             messages = self._fill_reasoning_content(messages)
         return await super().async_transform_request(
