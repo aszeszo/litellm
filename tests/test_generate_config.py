@@ -175,6 +175,33 @@ def test_default_copilot_overrides_preserve_work_skips_and_unprefix_non_gpt_mode
     assert generator.MODEL_OVERRIDES[("github_copilot", "gemini-3.5-flash")]["model_id"] == "gemini-3.5-flash"
 
 
+def test_default_claude_priorities_include_aliases_in_requested_order(generator: GeneratorModule):
+    ordered = (
+        ("claude-opus-5", "claude-opus-5[1m]"),
+        ("claude-sonnet-5", "claude-sonnet-5[1m]"),
+        ("claude-opus-4.8",),
+        ("claude-opus-4.8-fast",),
+        ("claude-opus-4.7",),
+        ("claude-opus-4.6",),
+        ("claude-sonnet-4.6",),
+        ("claude-opus-4.5",),
+        ("claude-sonnet-4.5",),
+        ("claude-haiku-4.5", "claude-haiku-4-5-20251001"),
+    )
+    priorities = tuple(
+        priority
+        for source_and_aliases in ordered
+        for source in source_and_aliases[:1]
+        for override in (generator.MODEL_OVERRIDES[("github_copilot", source)],)
+        for priority in (
+            override["codex_priority"],
+            *(alias["codex_priority"] for alias in cast(list[dict[str, object]], override.get("aliases", []))),
+        )
+    )
+
+    assert priorities == tuple(range(26, 39))
+
+
 def test_default_mode_can_disable_copilot_models(generator: GeneratorModule, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(generator, "ENABLE_GITHUB_COPILOT", False)
 
