@@ -121,6 +121,35 @@ def codex_metadata(model: ChatGPTModel) -> JsonObject:
     return JsonObjectAdapter.validate_python(model.model_dump(mode="json", exclude_none=False))
 
 
+def merge_json(default: JsonValue, supplied: JsonValue) -> JsonValue:
+    if not isinstance(default, dict) or not isinstance(supplied, dict):
+        return supplied
+    return {
+        key: (
+            merge_json(default[key], supplied[key])
+            if key in default and key in supplied
+            else supplied[key]
+            if key in supplied
+            else default[key]
+        )
+        for key in default.keys() | supplied.keys()
+    }
+
+
+def copilot_codex_metadata(model: CopilotModel, default_model: ChatGPTModel) -> JsonObject:
+    copilot = JsonObjectAdapter.validate_python(model.model_dump(mode="json", exclude_none=False))
+    name = copilot.get("name")
+    policy = copilot.get("policy")
+    description = policy.get("terms") if isinstance(policy, dict) else None
+    aliases: JsonObject = {
+        "slug": model.id,
+        **({"display_name": name} if isinstance(name, str) else {}),
+        **({"description": description} if isinstance(description, str) else {}),
+    }
+    merged = merge_json(codex_metadata(default_model), {**copilot, **aliases})
+    return JsonObjectAdapter.validate_python(merged)
+
+
 def build_config(
     copilot_models: tuple[CopilotModel, ...], chatgpt_models: tuple[ChatGPTModel, ...]
 ) -> dict[str, JsonValue]:
@@ -137,7 +166,10 @@ def build_config(
                 "cache_creation_input_token_cost": 0,
                 "cache_read_input_token_cost": 0,
                 "codex": apply_copilot_limits(
-                    codex_metadata(references.get(model.id, default_model)), model.capabilities.limits
+                    codex_metadata(references[model.id])
+                    if model.id in references
+                    else copilot_codex_metadata(model, default_model),
+                    model.capabilities.limits,
                 ),
             },
         }
