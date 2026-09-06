@@ -94,11 +94,13 @@ def test_router_shared_backend_does_not_warn_about_intentionally_stripped_cache_
         ]
     )
 
-    assert "cache cost fields will default to 0" not in caplog.text
+    assert "will default to 0 for this model" not in caplog.text
 
-    litellm.register_model({"direct-warning-test": {"litellm_provider": "custom"}})
+    litellm.register_model(
+        {"direct-warning-test": {"litellm_provider": "custom", "input_cost_per_token": 0.000001}}
+    )
 
-    assert "cache cost fields will default to 0" in caplog.text
+    assert "will default to 0 for this model" in caplog.text
 
 
 def test_second_registration_does_not_persist_synthesized_zero_costs():
