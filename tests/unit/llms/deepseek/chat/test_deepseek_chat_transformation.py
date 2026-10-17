@@ -808,6 +808,7 @@ def test_deepseek_fill_reasoning_content_multiturn():
         {
             "role": "assistant",
             "content": "Hi",
+            "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}}],
             "provider_specific_fields": {"reasoning_content": "stored thinking"},
         },
         {"role": "user", "content": "Follow up"},
@@ -820,7 +821,7 @@ def test_deepseek_fill_reasoning_content_multiturn():
     # Case 3: assistant message has no reasoning_content anywhere — should inject placeholder
     messages_no_rc = [
         {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi"},
+        {"role": "assistant", "content": "Hi", "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}}]},
         {"role": "user", "content": "Follow up"},
     ]
     result = config._fill_reasoning_content(messages_no_rc)
@@ -852,7 +853,8 @@ def test_deepseek_fill_reasoning_content_guard_in_transform_request():
 
     messages = [
         {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi"},
+        {"role": "assistant", "content": "Hi", "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "inspect", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "call_1", "content": "result"},
         {"role": "user", "content": "Follow up"},
     ]
 
