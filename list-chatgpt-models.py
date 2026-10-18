@@ -10,45 +10,44 @@
 # ///
 
 import json
-import subprocess
+import os
+import platform
 import sys
 from pathlib import Path
 from typing import Final
 
 import httpx
-from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
 from litellm.llms.chatgpt.authenticator import Authenticator
 
 
-class CodexIdentity(BaseModel):
+class CodexRelease(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    userAgent: str
+    tag_name: str = Field(pattern=r"^rust-v[0-9]+\.[0-9]+\.[0-9]+$")
 
 
-class InitializeResponse(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    result: CodexIdentity
-
-
-def codex_user_agent() -> str:
-    request: Final = {
-        "id": 1,
-        "method": "initialize",
-        "params": {"clientInfo": {"name": "codex_cli_rs", "version": "0.0.0"}},
-    }
-    process: Final = subprocess.run(
-        ["codex", "app-server"],
-        input=json.dumps(request) + "\n",
-        capture_output=True,
-        text=True,
-        check=True,
+def codex_user_agent(client: httpx.Client) -> str:
+    response: Final = client.get(
+        "https://api.github.com/repos/openai/codex/releases/latest",
+        headers={"Accept": "application/vnd.github+json"},
         timeout=30,
     )
-    response: Final = InitializeResponse.model_validate_json(process.stdout.splitlines()[0])
-    return response.result.userAgent.removesuffix(" (codex_cli_rs; 0.0.0)")
+    response.raise_for_status()
+    release: Final = CodexRelease.model_validate_json(response.content)
+    version: Final = release.tag_name.removeprefix("rust-v")
+    os_name: Final = "Mac OS" if platform.system() == "Darwin" else platform.system()
+    os_version: Final = platform.mac_ver()[0] if platform.system() == "Darwin" else platform.release()
+    terminal: Final = os.getenv("TERM_PROGRAM") or os.getenv("TERM") or "unknown"
+    terminal_version: Final = os.getenv("TERM_PROGRAM_VERSION") if os.getenv("TERM_PROGRAM") else None
+    terminal_token: Final = f"{terminal}/{terminal_version}" if terminal_version else terminal
+    safe_terminal: Final = "".join(
+        character
+        for character in terminal_token
+        if character.isascii() and (character.isalnum() or character in "-_./")
+    )
+    return f"codex_cli_rs/{version} ({os_name} {os_version}; {platform.machine()}) {safe_terminal or 'unknown'}"
 
 
 def load_models(client: httpx.Client, authenticator: Authenticator, user_agent: str) -> JsonValue:
@@ -76,8 +75,8 @@ def main() -> int:
         if not auth_data.get("access_token") and not auth_data.get("refresh_token"):
             sys.stderr.write(f"list-chatgpt-models: No ChatGPT credentials found in {authenticator.auth_file}\n")
             return 1
-        user_agent: Final = codex_user_agent()
         with httpx.Client() as client:
+            user_agent: Final = codex_user_agent(client)
             json.dump(load_models(client, authenticator, user_agent), sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
     except Exception as error:
