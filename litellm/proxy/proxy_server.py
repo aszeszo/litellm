@@ -440,7 +440,7 @@ from litellm.proxy.common_utils.auth_cache_invalidation_pubsub import (
     AuthCacheInvalidationSubscriber,
 )
 from litellm.proxy.common_utils.callback_utils import initialize_callbacks_on_proxy
-from litellm.proxy.common_utils.codex_model_catalog import codex_model_list_body
+from litellm.proxy.common_utils.codex_model_catalog import codex_model_list_body, codex_models_within_byte_limit
 from litellm.proxy.common_utils.config_includes import resolve_include_file_path, resolve_includes
 from litellm.proxy.common_utils.config_sync_pubsub import ConfigSyncSubscriber
 from litellm.proxy.common_utils.credential_hydration import decrypted_or_stored
@@ -12260,7 +12260,7 @@ def _client_specific_model_list(
         if isinstance((model_info := deployment.get("model_info")), Mapping)
         and isinstance((client_model_info := model_info.get(model_info_key)), Mapping)
     )
-    return {envelope_key: models}
+    return {envelope_key: codex_models_within_byte_limit(models) if model_info_key == "codex" else models}
 
 
 @router.get("/v1/models", dependencies=[Depends(user_api_key_auth)], tags=["model management"])

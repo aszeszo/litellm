@@ -14,6 +14,7 @@ from litellm.proxy.common_utils.codex_model_catalog import (
     codex_catalog_rows,
     codex_model_list_body,
     codex_models_response_json,
+    codex_models_within_byte_limit,
     configured_service_tiers,
 )
 
@@ -367,6 +368,19 @@ def test_unlimited_body_keeps_every_entry():
 
     assert (body.listed, body.left_out) == (tuple(row.id for row in rows), ())
     assert CODEX_CATALOG_BYTE_LIMIT == 1024 * 1024
+
+
+def test_configured_codex_models_are_ordered_by_priority_and_cut_to_the_byte_limit():
+    models = tuple(
+        {"slug": slug, "priority": priority, "base_instructions": "x" * 400}
+        for slug, priority in (("low", 2), ("high", 0), ("medium", 1))
+    )
+    one_high = json.dumps({"models": [models[1]]}, separators=(",", ":")).encode()
+
+    kept = codex_models_within_byte_limit(models, byte_limit=len(one_high) + 10)
+
+    assert [model["slug"] for model in kept] == ["high"]
+    assert len(json.dumps({"models": kept}, separators=(",", ":")).encode()) <= len(one_high) + 10
 
 
 def test_vendored_codex_catalog_entries_decode_on_codex():

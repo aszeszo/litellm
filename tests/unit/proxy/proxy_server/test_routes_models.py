@@ -16,6 +16,7 @@ import pytest
 import litellm
 from litellm.proxy import proxy_server
 from litellm.proxy import utils as proxy_utils
+from litellm.proxy.common_utils.codex_model_catalog import CODEX_CATALOG_BYTE_LIMIT
 from litellm.proxy.utils import create_model_info_response
 from litellm.types.router import DeploymentModelListingInfo
 
@@ -128,6 +129,34 @@ def test_v1_models_uses_client_specific_schema(
 
     assert response.status_code == 200
     assert response.json() == {expected_key: [configured_info[model_info_key]] * 2}
+
+
+def test_v1_models_keeps_high_priority_models_within_the_codex_byte_limit(client, auth_as, patched_models):
+    qwen = {
+        "slug": "qwen3.8-flash-next-unsloth-ud",
+        "display_name": "Qwen 3.8 Flash Next Unsloth UD",
+        "priority": 0,
+        "base_instructions": "qwen",
+    }
+    oversized = {
+        "slug": "oversized",
+        "display_name": "Oversized",
+        "priority": 1,
+        "base_instructions": "x" * CODEX_CATALOG_BYTE_LIMIT,
+    }
+    patched_models.get_model_list.side_effect = lambda model_name=None: [
+        {
+            "model_name": model_name,
+            "model_info": {"codex": qwen if model_name == "gpt-4" else oversized},
+        }
+    ]
+
+    with auth_as():
+        response = client.get("/v1/models", params={"client_version": "0.167.0"})
+
+    assert response.status_code == 200
+    assert len(response.content) <= CODEX_CATALOG_BYTE_LIMIT
+    assert [model["slug"] for model in response.json()["models"]] == ["qwen3.8-flash-next-unsloth-ud"]
 
 
 @pytest.mark.parametrize("path", ["/v1/models", "/models"])

@@ -18,6 +18,7 @@ a newer tag.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import cache
@@ -322,6 +323,19 @@ def _fits(serialized: Sequence[str], byte_limit: int | None) -> tuple[bool, ...]
         accumulate((len(entry.encode()) + 1 for entry in serialized), _bytes_left_after, initial=budget)
     )
     return tuple(after < before for before, after in pairwise(left))
+
+
+def codex_models_within_byte_limit(
+    models: Sequence[Mapping[str, object]], byte_limit: int = CODEX_CATALOG_BYTE_LIMIT
+) -> tuple[Mapping[str, object], ...]:
+    def priority(position: int) -> int:
+        value = models[position].get("priority")
+        return value if isinstance(value, int) else 0
+
+    ordered = tuple(sorted(range(len(models)), key=lambda position: (priority(position), position)))
+    serialized = tuple(json.dumps(models[position], ensure_ascii=False, separators=(",", ":")) for position in ordered)
+    kept = frozenset(position for position, fits in zip(ordered, _fits(serialized, byte_limit), strict=True) if fits)
+    return tuple(models[position] for position in sorted(kept, key=lambda position: (priority(position), position)))
 
 
 def _kept_positions(
