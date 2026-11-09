@@ -5,6 +5,7 @@
 #   "httpx>=0.27,<1",
 #   "litellm>=1.77",
 #   "pydantic>=2,<3",
+#   "pydantic-settings>=2,<3",
 #   "pyyaml>=6,<7",
 # ]
 # ///
@@ -20,9 +21,8 @@ import httpx
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
 
-from litellm.llms.github_copilot.authenticator import Authenticator
 from litellm.llms.github_copilot import common_utils as copilot_common_utils
-
+from litellm.llms.github_copilot.authenticator import Authenticator
 
 ProviderName = Literal["chatgpt", "github_copilot", "deepseek", "zai", "xiaomi", "moonshotai", "local"]
 ModelKey = tuple[ProviderName, str]
@@ -141,16 +141,40 @@ LOCAL_MODELS: list[LocalModel] = [
         "model": "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
         "api_base": "http://localhost:9090/v1",
         "api_key": "dummy",
-        "reasoning_levels": [],
-        "default_reasoning_level": None,
+        "reasoning_levels": ["none", "high"],
+        "default_reasoning_level": "high",
     },
     {
         "model_name": "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
         "model": "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
         "api_base": "http://localhost:9090/v1",
         "api_key": "dummy",
-        "reasoning_levels": [],
-        "default_reasoning_level": None,
+        "reasoning_levels": ["none", "high"],
+        "default_reasoning_level": "high",
+    },
+    {
+        "model_name": "antirez/deepseek-v4-gguf",
+        "model": "antirez/deepseek-v4-gguf",
+        "api_base": "http://172.24.0.27:9090/v1",
+        "api_key": "dummy",
+        "reasoning_levels": ["none", "low", "high", "max"],
+        "default_reasoning_level": "low",
+    },
+    {
+        "model_name": "deepseek-v4.1-flash",
+        "model": "deepseek-v4.1-flash",
+        "api_base": "http://172.24.0.27:8080/v1",
+        "api_key": "dummy",
+        "reasoning_levels": ["none", "low", "high", "max"],
+        "default_reasoning_level": "low",
+    },
+    {
+        "model_name": "qwen3.8-flash-next-unsloth-ud",
+        "model": "qwen3.8-flash-next-unsloth-ud-iq4_xs",
+        "api_base": "http://172.24.0.27:8080/v1",
+        "api_key": "dummy",
+        "reasoning_levels": ["none", "low", "medium", "xhigh"],
+        "default_reasoning_level": "low",
     },
 ]
 LOCAL_MODELS_WORK: list[LocalModel] = []
@@ -221,6 +245,7 @@ MODEL_OVERRIDES: dict[ModelKey, ModelOverride] = {
     },
     ("local", "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"): {"codex_priority": 24},
     ("local", "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M"): {"codex_priority": 25},
+    ("local", "qwen3.8-flash-next-unsloth-ud"): {"codex_priority": 0},
     ("github_copilot", "claude-opus-4.6"): {
         "model_id": "claude-opus-4.6",
         "codex_priority": 33,
@@ -719,6 +744,7 @@ def reasoning_presets(levels: tuple[str, ...]) -> list[JsonValue]:
         "low": "Low thinking effort",
         "medium": "Medium thinking effort",
         "high": "High thinking effort",
+        "xhigh": "Extra high thinking effort",
         "max": "Maximum thinking effort",
     }
     return [{"effort": level, "description": descriptions[level]} for level in levels]
@@ -853,6 +879,7 @@ def local_entry(model: LocalModel, model_name: str, metadata: JsonObject) -> Jso
             "model": f"openai/{model['model']}",
             "api_base": model["api_base"],
             "api_key": model["api_key"],
+            **({"allowed_openai_params": ["reasoning_effort"]} if model["reasoning_levels"] else {}),
         },
         "model_info": {
             "cache_creation_input_token_cost": 0,
@@ -881,7 +908,12 @@ def local_entries(
                     **codex_metadata(default_model),
                     "slug": model_name,
                     "display_name": model_name,
-                    "description": f"{model['model']} via local OpenAI-compatible API",
+                    "description": (
+                        "DeepSeek-V4-Flash-0731 via llama.cpp; none disables thinking, low uses standard thinking, "
+                        "and high/max use the official DeepSeek effort prompts"
+                        if model["model_name"] == "antirez/deepseek-v4-gguf"
+                        else f"{model['model']} via local OpenAI-compatible API"
+                    ),
                     "default_reasoning_level": model["default_reasoning_level"],
                     "supported_reasoning_levels": reasoning_presets(tuple(model["reasoning_levels"])),
                     "use_responses_lite": False,

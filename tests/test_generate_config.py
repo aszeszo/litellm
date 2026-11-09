@@ -124,11 +124,23 @@ def test_default_mode_prefixes_providers_and_maps_reasoning(generator: Generator
         "kimi-k3",
         "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
         "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+        "antirez/deepseek-v4-gguf",
+        "deepseek-v4.1-flash",
+        "qwen3.8-flash-next-unsloth-ud",
     }
     reasoning = cast(list[dict[str, str]], rows["glm-5.2"]["model_info"]["codex"]["supported_reasoning_levels"])
     assert [preset["effort"] for preset in reasoning] == ["none", "low", "medium", "high", "max"]
     assert rows["mimo-v2.5-pro"]["litellm_params"]["model"] == "deepseek/mimo-v2.5-pro"
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["litellm_params"]["api_base"] == "http://localhost:9090/v1"
+    qwen_reasoning = cast(
+        list[dict[str, str]], rows["qwen3.8-flash-next-unsloth-ud"]["model_info"]["codex"]["supported_reasoning_levels"]
+    )
+    assert [preset["effort"] for preset in qwen_reasoning] == ["none", "low", "medium", "xhigh"]
+    assert (
+        rows["qwen3.8-flash-next-unsloth-ud"]["litellm_params"]["model"]
+        == "openai/qwen3.8-flash-next-unsloth-ud-iq4_xs"
+    )
+    assert rows["qwen3.8-flash-next-unsloth-ud"]["model_info"]["codex"]["priority"] == 0
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_creation_input_token_cost"] == 0
     assert rows["unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M"]["model_info"]["cache_read_input_token_cost"] == 0
     assert rows["gpt-5.5"]["model_info"]["codex"]["priority"] == 4
@@ -217,4 +229,7 @@ def test_default_mode_can_disable_copilot_models(generator: GeneratorModule, mon
         "gpt-5.5",
         "unsloth/Qwen3.6-27B-MTP-GGUF:Q4_K_M",
         "unsloth/Qwen3.5-35B-A3B-MTP-GGUF:Q4_K_M",
+        "antirez/deepseek-v4-gguf",
+        "deepseek-v4.1-flash",
+        "qwen3.8-flash-next-unsloth-ud",
     ]
